@@ -29,4 +29,45 @@ struct MarkdownExporterTests {
         #expect(markdown.contains("**Hello**"))
         #expect(markdown.contains("- Item"))
     }
+
+    @Test func exportsDocumentEndFootnotesAndResolvedChromeToMarkdown() async throws {
+        let document = Document(
+            title: "Draft",
+            sections: [
+                DocumentSection(
+                    blocks: [
+                        Block(id: "anchor-1", type: .paragraph, content: .text(.plain("Body"))),
+                    ],
+                    headerFooter: HeaderFooterConfig(
+                        header: HeaderFooter(center: [TextRun(text: "Hdr {PAGE}")])
+                    ),
+                    startPageNumber: 4,
+                    footnotes: [
+                        Footnote(anchorBlockID: "anchor-1", content: .plain("First note")),
+                    ]
+                ),
+                DocumentSection(
+                    blocks: [
+                        Block(id: "anchor-2", type: .paragraph, content: .text(.plain("More body"))),
+                    ],
+                    footnotes: [
+                        Footnote(anchorBlockID: "anchor-2", content: .plain("Second note")),
+                    ]
+                ),
+            ],
+            settings: DocumentSettings(
+                footnoteConfig: FootnoteConfig(placement: .documentEnd, restartPerSection: false)
+            )
+        )
+
+        let exportable = BlockToExportMapper().map(document: document)
+        let data = try await MarkdownExporter().export(exportable, options: ExportOptions())
+        let markdown = String(decoding: data, as: UTF8.self)
+
+        #expect(markdown.contains("_Header:_ Hdr 4"))
+        #expect(markdown.contains("## Document Footnotes"))
+        #expect(markdown.contains("1. First note"))
+        #expect(markdown.contains("2. Second note"))
+        #expect(markdown.contains("<!-- section 1 start-page: 4 columns: 1 -->"))
+    }
 }

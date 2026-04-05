@@ -7,12 +7,13 @@ public struct HTMLExporter: DocumentExporter {
     public let formatID = "html"
     public let fileExtension = "html"
     public let utType = UTType.html
+    private let fieldResolver = FieldCodeResolver()
 
     public init() {}
 
     public func export(_ document: ExportableDocument, options: ExportOptions) async throws -> Data {
         _ = options
-        let body = document.blocks.map(render(block:)).joined(separator: "\n")
+        let body = renderBody(for: document)
         let html = """
         <!doctype html>
         <html>
@@ -26,6 +27,73 @@ public struct HTMLExporter: DocumentExporter {
         </html>
         """
         return Data(html.utf8)
+    }
+
+    private func renderBody(for document: ExportableDocument) -> String {
+        guard !document.sections.isEmpty else {
+            return document.blocks.map(render(block:)).joined(separator: "\n")
+        }
+
+        let sectionStartPages = sectionStartPages(for: document.sections)
+        let totalPageCount = max(sectionStartPages.last ?? 1, 1)
+        let configuration = document.footnoteConfiguration ?? ExportFootnoteConfiguration()
+        var body: [String] = []
+        var continuousFootnoteNumber = 1
+
+        for (sectionIndex, section) in document.sections.enumerated() {
+            let context = fieldContext(
+                for: document,
+                sectionIndex: sectionIndex,
+                sectionStartPages: sectionStartPages,
+                totalPageCount: totalPageCount
+            )
+
+            var parts: [String] = []
+
+            if let header = render(headerFooter: section.headerFooter?.header, role: "header", context: context) {
+                parts.append(header)
+            }
+
+            let blocks = section.blocks.map(render(block:)).joined(separator: "\n")
+            if !blocks.isEmpty {
+                parts.append(blocks)
+            }
+
+            if configuration.placement != .documentEnd,
+               let footnotes = renderFootnotes(
+                section.footnotes,
+                title: "Footnotes",
+                startingAt: configuration.restartPerSection ? 1 : continuousFootnoteNumber,
+                sectionIndex: sectionIndex
+               ) {
+                parts.append(footnotes)
+            }
+
+            if let footer = render(headerFooter: section.headerFooter?.footer, role: "footer", context: context) {
+                parts.append(footer)
+            }
+
+            continuousFootnoteNumber += section.footnotes.count
+
+            body.append(
+                """
+                <section class="document-section" data-section-index="\(sectionIndex + 1)" data-columns="\(section.pageTemplate.columns)" data-start-page="\(sectionStartPages[sectionIndex])">
+                \(parts.joined(separator: "\n"))
+                </section>
+                """
+            )
+        }
+
+        if configuration.placement == .documentEnd,
+           let documentFootnotes = renderDocumentFootnotes(
+            sections: document.sections,
+            configuration: configuration,
+            continuousStart: 1
+           ) {
+            body.append(documentFootnotes)
+        }
+
+        return body.joined(separator: "\n")
     }
 
     private func render(block: ExportBlock) -> String {
@@ -57,6 +125,129 @@ public struct HTMLExporter: DocumentExporter {
 
     private func render(text: ExportTextContent) -> String {
         text.runs.map(render(run:)).joined()
+    }
+
+    private func render(
+        headerFooter: ExportHeaderFooter?,
+        role: String,
+        context: FieldResolutionContext
+    ) -> String? {
+        guard let headerFooter else { return nil }
+
+        let left = renderResolved(text: headerFooter.left, context: context)
+        let center = renderResolved(text: headerFooter.center, context: context)
+        let right = renderResolved(text: headerFooter.right, context: context)
+
+        guard !(left.isEmpty && center.isEmpty && right.isEmpty) else { return nil }
+
+        return """
+        <\(role) class="document-section-\(role)">
+          <div class="\(role)-left">\(left)</div>
+          <div class="\(role)-center">\(center)</div>
+          <div class="\(role)-right">\(right)</div>
+        </\(role)>
+        """
+    }
+
+    private func renderFootnotes(
+        _ footnotes: [ExportFootnote],
+        title: String,
+        startingAt startNumber: Int,
+        sectionIndex: Int?
+    ) -> String? {
+        guard !footnotes.isEmpty else { return nil }
+
+        let sectionAttribute = sectionIndex.map { " data-section-index=\"\($0 + 1)\"" } ?? ""
+        let items = footnotes.enumerated().map { offset, footnote in
+            let number = startNumber + offset
+            return """
+            <li value="\(number)" data-anchor-source="\(escape(footnote.anchorSourceIdentifier))">\(render(text: footnote.content))</li>
+            """
+        }.joined(separator: "\n")
+
+        return """
+        <aside class="document-footnotes"\(sectionAttribute)>
+          <h2>\(escape(title))</h2>
+          <ol>
+        \(items)
+          </ol>
+        </aside>
+        """
+    }
+
+    private func renderDocumentFootnotes(
+        sections: [ExportSection],
+        configuration: ExportFootnoteConfiguration,
+        continuousStart: Int
+    ) -> String? {
+        if configuration.restartPerSection {
+            let groups = sections.enumerated().compactMap { index, section in
+                renderFootnotes(
+                    section.footnotes,
+                    title: "Section \(index + 1) Footnotes",
+                    startingAt: 1,
+                    sectionIndex: index
+                )
+            }
+
+            guard !groups.isEmpty else { return nil }
+            return """
+            <section class="document-endnotes">
+            <h1>Document Footnotes</h1>
+            \(groups.joined(separator: "\n"))
+            </section>
+            """
+        }
+
+        return renderFootnotes(
+            sections.flatMap(\.footnotes),
+            title: "Document Footnotes",
+            startingAt: continuousStart,
+            sectionIndex: nil
+        )
+    }
+
+    private func renderResolved(text: ExportTextContent, context: FieldResolutionContext) -> String {
+        render(text: resolved(text: text, context: context))
+    }
+
+    private func resolved(text: ExportTextContent, context: FieldResolutionContext) -> ExportTextContent {
+        ExportTextContent(
+            runs: text.runs.map { run in
+                var updated = run
+                updated.text = fieldResolver.resolveInlineTokens(in: updated.text, context: context)
+                return updated
+            }
+        )
+    }
+
+    private func fieldContext(
+        for document: ExportableDocument,
+        sectionIndex: Int,
+        sectionStartPages: [Int],
+        totalPageCount: Int
+    ) -> FieldResolutionContext {
+        FieldResolutionContext(
+            pageNumber: sectionStartPages[sectionIndex],
+            pageCount: totalPageCount,
+            sectionNumber: sectionIndex + 1,
+            date: document.metadata.modifiedAt ?? document.metadata.createdAt ?? Date(),
+            title: document.metadata.title,
+            author: document.metadata.author
+        )
+    }
+
+    private func sectionStartPages(for sections: [ExportSection]) -> [Int] {
+        var pages: [Int] = []
+        var nextPage = 1
+
+        for section in sections {
+            let startPage = max(section.startPageNumber ?? nextPage, 1)
+            pages.append(startPage)
+            nextPage = startPage + 1
+        }
+
+        return pages
     }
 
     private func render(run: ExportTextRun) -> String {
