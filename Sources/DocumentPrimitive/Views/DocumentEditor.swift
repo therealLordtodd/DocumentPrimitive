@@ -20,13 +20,13 @@ public struct DocumentEditor: View {
         }
         .onAppear {
             state.layoutEngine.reflow()
-            state.syncCurrentLocationToSelection()
+            state.syncCurrentLocation(using: state.richTextState)
         }
         .onChange(of: state.richTextState.selection) { _, _ in
-            state.syncCurrentLocationToSelection()
+            state.syncCurrentLocation(using: state.richTextState)
         }
         .onChange(of: state.richTextState.focusedBlockID) { _, _ in
-            state.syncCurrentLocationToSelection()
+            state.syncCurrentLocation(using: state.richTextState)
         }
     }
 
@@ -39,8 +39,9 @@ public struct DocumentEditor: View {
             ScrollView {
                 VStack(spacing: 20) {
                     ForEach(state.document.sections) { section in
+                        let sectionEditorState = state.richTextState(forSection: section.id)
                         RichTextEditor(
-                            state: state.richTextState,
+                            state: sectionEditorState,
                             dataSource: state.dataSource(for: section.id),
                             styleSheet: TextStyleSheet.standard
                         )
@@ -49,6 +50,12 @@ public struct DocumentEditor: View {
                         .background(.background)
                         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                         .shadow(color: .black.opacity(0.05), radius: 12, y: 6)
+                        .onChange(of: sectionEditorState.selection) { _, _ in
+                            state.syncCurrentLocation(using: sectionEditorState)
+                        }
+                        .onChange(of: sectionEditorState.focusedBlockID) { _, _ in
+                            state.syncCurrentLocation(using: sectionEditorState)
+                        }
                     }
                 }
                 .padding(24)

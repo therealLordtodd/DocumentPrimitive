@@ -212,6 +212,71 @@ struct DocumentModelTests {
     }
 
     @MainActor
+    @Test func sectionAndHeaderFooterEditorStatesStayIsolated() {
+        let document = Document(
+            title: "Draft",
+            sections: [
+                DocumentSection(
+                    id: "section",
+                    blocks: [
+                        Block(id: "body", type: .paragraph, content: .text(.plain("Hello body"))),
+                    ],
+                    headerFooter: HeaderFooterConfig(
+                        header: HeaderFooter(center: [TextRun(text: "Header")])
+                    )
+                ),
+            ]
+        )
+
+        let state = DocumentEditorState(document: document)
+        let sectionEditorState = state.richTextState(forSection: "section")
+        let repeatedSectionEditorState = state.richTextState(forSection: "section")
+        let headerEditorState = state.headerFooterRichTextState(for: "section", slot: .headerCenter)
+
+        #expect(sectionEditorState === repeatedSectionEditorState)
+        #expect(sectionEditorState !== headerEditorState)
+
+        sectionEditorState.selection = .caret("body", offset: 5)
+        sectionEditorState.focusedBlockID = "body"
+        headerEditorState.selection = .caret(BlockID("section-headerCenter"), offset: 2)
+        headerEditorState.focusedBlockID = BlockID("section-headerCenter")
+
+        #expect(sectionEditorState.focusedBlockID == "body")
+        #expect(headerEditorState.focusedBlockID == BlockID("section-headerCenter"))
+        #expect(sectionEditorState.selection != headerEditorState.selection)
+    }
+
+    @MainActor
+    @Test func pageEditorStateSelectionDrivesCurrentPageIndependentlyOfSharedState() {
+        let longText = String(repeating: "Split me across pages ", count: 2500)
+        let document = Document(
+            title: "Paged",
+            sections: [
+                DocumentSection(
+                    id: "section",
+                    blocks: [
+                        Block(id: "body", type: .paragraph, content: .text(.plain(longText))),
+                    ]
+                ),
+            ]
+        )
+
+        let state = DocumentEditorState(document: document)
+        let firstPage = try! #require(state.layoutEngine.pages.first)
+        let pageEditorState = state.richTextState(forPage: firstPage)
+        let lastPageNumber = try! #require(state.layoutEngine.pages.last?.pageNumber)
+
+        state.richTextState.selection = .caret("body", offset: 0)
+        pageEditorState.selection = .caret("body", offset: longText.count)
+        pageEditorState.focusedBlockID = "body"
+
+        state.syncCurrentLocation(using: pageEditorState)
+
+        #expect(state.currentPage == lastPageNumber)
+        #expect(state.currentSection == "section")
+    }
+
+    @MainActor
     @Test func pageNavigationMovesThroughLaidOutPagesInOrder() {
         let longText = String(repeating: "Body copy ", count: 2000)
         let document = Document(

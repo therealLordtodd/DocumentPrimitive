@@ -91,11 +91,18 @@ public struct PageView: View {
         VStack(spacing: 0) {
             Group {
                 if isActive {
+                    let pageEditorState = state.richTextState(forPage: page)
                     RichTextEditor(
-                        state: state.richTextState,
+                        state: pageEditorState,
                         dataSource: state.dataSource(for: page),
                         styleSheet: TextStyleSheet.standard
                     )
+                    .onChange(of: pageEditorState.selection) { _, _ in
+                        state.syncCurrentLocation(using: pageEditorState)
+                    }
+                    .onChange(of: pageEditorState.focusedBlockID) { _, _ in
+                        state.syncCurrentLocation(using: pageEditorState)
+                    }
                 } else {
                     HStack(alignment: .top, spacing: page.template.columnSpacing) {
                         ForEach(Array(columnPlacements.enumerated()), id: \.offset) { _, placements in
@@ -179,8 +186,9 @@ public struct PageView: View {
         isActive: Bool
     ) -> some View {
         if isActive {
+            let headerFooterState = state.headerFooterRichTextState(for: page.sectionID, slot: slot)
             RichTextEditor(
-                state: state.richTextState,
+                state: headerFooterState,
                 dataSource: state.headerFooterDataSource(for: page.sectionID, slot: slot),
                 styleSheet: TextStyleSheet.standard
             )

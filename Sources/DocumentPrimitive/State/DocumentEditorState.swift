@@ -9,6 +9,7 @@ public final class DocumentEditorState {
         didSet {
             layoutEngine.document = document
             layoutEngine.reflow()
+            pruneDerivedEditorStateCaches()
             if currentSection == nil {
                 currentSection = document.sections.first?.id
             }
@@ -28,6 +29,10 @@ public final class DocumentEditorState {
     private var sectionDataSources: [SectionID: SectionDataSource] = [:]
     private var pageDataSources: [String: PageScopedDataSource] = [:]
     private var headerFooterDataSources: [String: HeaderFooterDataSource] = [:]
+    private var sectionRichTextStates: [SectionID: RichTextState] = [:]
+    private var pageRichTextStates: [String: RichTextState] = [:]
+    private var headerFooterRichTextStates: [String: RichTextState] = [:]
+    private weak var activeEditorRichTextState: RichTextState?
 
     public init(
         document: Document,
@@ -97,6 +102,47 @@ public final class DocumentEditorState {
         return source
     }
 
+    public func richTextState(forSection sectionID: SectionID) -> RichTextState {
+        if let existing = sectionRichTextStates[sectionID] {
+            return existing
+        }
+
+        let state = makeDerivedRichTextState(
+            allowedBlockIDs: blocks(for: sectionID).map(\.id)
+        )
+        sectionRichTextStates[sectionID] = state
+        return state
+    }
+
+    public func richTextState(forPage page: ComputedPage) -> RichTextState {
+        let key = pageDataSourceKey(for: page)
+        if let existing = pageRichTextStates[key] {
+            return existing
+        }
+
+        let state = makeDerivedRichTextState(
+            allowedBlockIDs: visibleBlockIDs(for: page)
+        )
+        pageRichTextStates[key] = state
+        return state
+    }
+
+    public func headerFooterRichTextState(
+        for sectionID: SectionID,
+        slot: HeaderFooterSlot
+    ) -> RichTextState {
+        let key = headerFooterDataSourceKey(for: sectionID, slot: slot)
+        if let existing = headerFooterRichTextStates[key] {
+            return existing
+        }
+
+        let state = makeDerivedRichTextState(
+            allowedBlockIDs: [headerFooterBlockID(for: sectionID, slot: slot)]
+        )
+        headerFooterRichTextStates[key] = state
+        return state
+    }
+
     fileprivate func blocks(for sectionID: SectionID) -> [Block] {
         document.section(sectionID)?.blocks ?? []
     }
@@ -106,6 +152,7 @@ public final class DocumentEditorState {
         document.sections[index].blocks = blocks
         layoutEngine.document = document
         layoutEngine.reflow()
+        pruneDerivedEditorStateCaches()
         broadcastSectionMutation(for: sectionID)
         syncCurrentLocationToSelection()
         ensureCurrentPageExists()
@@ -219,6 +266,7 @@ public final class DocumentEditorState {
         document.sections[index].headerFooter = config
         layoutEngine.document = document
         layoutEngine.reflow()
+        pruneDerivedEditorStateCaches()
         broadcastHeaderFooterMutation(for: sectionID)
         syncCurrentLocationToSelection()
         ensureCurrentPageExists()
@@ -235,7 +283,13 @@ public final class DocumentEditorState {
     }
 
     func syncCurrentLocationToSelection() {
-        guard let position = selectedPosition(),
+        syncCurrentLocation(using: activeEditorRichTextState ?? richTextState)
+    }
+
+    func syncCurrentLocation(using editorState: RichTextState) {
+        activeEditorRichTextState = editorState
+
+        guard let position = selectedPosition(in: editorState),
               let location = pageLocation(for: position)
         else {
             return
@@ -272,6 +326,23 @@ public final class DocumentEditorState {
         }
     }
 
+    private func pruneDerivedEditorStateCaches() {
+        let validSectionIDs = Set(document.sections.map(\.id))
+        sectionRichTextStates = sectionRichTextStates.filter { validSectionIDs.contains($0.key) }
+        sectionDataSources = sectionDataSources.filter { validSectionIDs.contains($0.key) }
+
+        let validPageKeys = Set(layoutEngine.pages.map(pageDataSourceKey(for:)))
+        pageRichTextStates = pageRichTextStates.filter { validPageKeys.contains($0.key) }
+        pageDataSources = pageDataSources.filter { validPageKeys.contains($0.key) }
+
+        headerFooterRichTextStates = headerFooterRichTextStates.filter { key, _ in
+            validSectionIDs.contains(sectionID(fromHeaderFooterKey: key))
+        }
+        headerFooterDataSources = headerFooterDataSources.filter { key, _ in
+            validSectionIDs.contains(sectionID(fromHeaderFooterKey: key))
+        }
+    }
+
     func pageScrollKey(for page: ComputedPage) -> String {
         pageDataSourceKey(for: page)
     }
@@ -280,14 +351,77 @@ public final class DocumentEditorState {
         resolvedCurrentPage().map(pageScrollKey(for:))
     }
 
-    private func selectedPosition() -> TextPosition? {
+    private func makeDerivedRichTextState(allowedBlockIDs: [BlockID]) -> RichTextState {
+        RichTextState(
+            selection: initialSelection(for: allowedBlockIDs),
+            activeAttributes: richTextState.activeAttributes,
+            findState: richTextState.findState,
+            writingMode: richTextState.writingMode,
+            focusedBlockID: initialFocusedBlockID(for: allowedBlockIDs),
+            zoomLevel: richTextState.zoomLevel
+        )
+    }
+
+    private func initialSelection(for allowedBlockIDs: [BlockID]) -> TextSelection {
+        let allowed = Set(allowedBlockIDs)
+
         switch richTextState.selection {
+        case let .caret(blockID, offset) where allowed.contains(blockID):
+            return .caret(blockID, offset: offset)
+        case let .range(start, end) where allowed.contains(start.blockID) && allowed.contains(end.blockID):
+            return .range(start: start, end: end)
+        case let .blockSelection(blockIDs) where !allowed.intersection(blockIDs).isEmpty:
+            return .blockSelection(allowed.intersection(blockIDs))
+        default:
+            guard let firstBlockID = allowedBlockIDs.first else {
+                return .blockSelection([])
+            }
+            return .caret(firstBlockID, offset: 0)
+        }
+    }
+
+    private func initialFocusedBlockID(for allowedBlockIDs: [BlockID]) -> BlockID? {
+        if let focusedBlockID = richTextState.focusedBlockID, allowedBlockIDs.contains(focusedBlockID) {
+            return focusedBlockID
+        }
+        return allowedBlockIDs.first
+    }
+
+    private func visibleBlockIDs(for page: ComputedPage) -> [BlockID] {
+        if !page.blockPlacements.isEmpty {
+            var seen: Set<BlockID> = []
+            return page.blockPlacements.compactMap { placement in
+                if seen.insert(placement.blockID).inserted {
+                    return placement.blockID
+                }
+                return nil
+            }
+        }
+
+        guard let section = document.section(page.sectionID) else { return [] }
+        return page.blockRanges.flatMap { range in
+            Array(range.startIndex...range.endIndex).compactMap { index in
+                section.blocks.indices.contains(index) ? section.blocks[index].id : nil
+            }
+        }
+    }
+
+    private func headerFooterBlockID(for sectionID: SectionID, slot: HeaderFooterSlot) -> BlockID {
+        BlockID("\(sectionID.rawValue)-\(slot.rawValue)")
+    }
+
+    private func sectionID(fromHeaderFooterKey key: String) -> SectionID {
+        SectionID(String(key.split(separator: "#", maxSplits: 1).first ?? ""))
+    }
+
+    private func selectedPosition(in editorState: RichTextState) -> TextPosition? {
+        switch editorState.selection {
         case let .caret(blockID, offset):
             return TextPosition(blockID: blockID, offset: offset)
         case let .range(start, _):
             return start
         case let .blockSelection(blockIDs):
-            if let focusedBlockID = richTextState.focusedBlockID {
+            if let focusedBlockID = editorState.focusedBlockID {
                 return TextPosition(blockID: focusedBlockID, offset: 0)
             }
             guard let firstBlockID = blockIDs.sorted(by: { $0.rawValue < $1.rawValue }).first else {
