@@ -277,6 +277,97 @@ struct DocumentModelTests {
     }
 
     @MainActor
+    @Test func blockEditorStateSelectionTracksCurrentPageAcrossSplitBlocks() {
+        let longText = String(repeating: "Split me across pages ", count: 2500)
+        let document = Document(
+            title: "Paged",
+            sections: [
+                DocumentSection(
+                    id: "section",
+                    blocks: [
+                        Block(id: "body", type: .paragraph, content: .text(.plain(longText))),
+                    ]
+                ),
+            ]
+        )
+
+        let state = DocumentEditorState(document: document)
+        let blockEditorState = state.richTextState(forBlock: "body", in: "section")
+        let lastPageNumber = try! #require(state.layoutEngine.pages.last?.pageNumber)
+
+        blockEditorState.selection = .caret("body", offset: longText.count)
+        blockEditorState.focusedBlockID = "body"
+        state.syncCurrentLocation(using: blockEditorState)
+
+        #expect(state.currentPage == lastPageNumber)
+        #expect(state.currentSection == "section")
+    }
+
+    @MainActor
+    @Test func blockDataSourcePreservesOriginalIdentityWhenSingleBlockSplits() {
+        let state = DocumentEditorState(
+            document: Document(
+                title: "Draft",
+                sections: [
+                    DocumentSection(
+                        id: "section",
+                        blocks: [
+                            Block(
+                                id: "body",
+                                type: .paragraph,
+                                content: .text(.plain("Original")),
+                                metadata: BlockMetadata(custom: ["locked": .bool(true)])
+                            ),
+                        ]
+                    ),
+                ]
+            )
+        )
+        let dataSource = state.dataSource(forBlock: "body", in: "section")
+        let firstReplacement = Block(id: "replacement", type: .paragraph, content: .text(.plain("First")))
+        let secondReplacement = Block(id: "tail", type: .paragraph, content: .text(.plain("Second")))
+
+        dataSource.insertBlocks([firstReplacement, secondReplacement], at: 0)
+
+        let blocks = state.document.section("section")?.blocks ?? []
+        #expect(blocks.count == 2)
+        #expect(blocks[0].id == "body")
+        #expect(blocks[0].content.textContent?.plainText == "First")
+        #expect(blocks[0].metadata.custom["locked"] == .bool(true))
+        #expect(blocks[1].id == "tail")
+        #expect(blocks[1].content.textContent?.plainText == "Second")
+    }
+
+    @MainActor
+    @Test func blockDataSourceMovesFocusIntoInsertedTrailingBlock() {
+        let state = DocumentEditorState(
+            document: Document(
+                title: "Draft",
+                sections: [
+                    DocumentSection(
+                        id: "section",
+                        blocks: [
+                            Block(id: "body", type: .paragraph, content: .text(.plain("Original"))),
+                        ]
+                    ),
+                ]
+            )
+        )
+        let dataSource = state.dataSource(forBlock: "body", in: "section")
+
+        dataSource.insertBlocks(
+            [
+                Block(id: "replacement", type: .paragraph, content: .text(.plain("First"))),
+                Block(id: "tail", type: .paragraph, content: .text(.plain("Second"))),
+            ],
+            at: 0
+        )
+
+        #expect(state.richTextState.focusedBlockID == "tail")
+        #expect(state.richTextState.selection == .caret("tail", offset: 0))
+    }
+
+    @MainActor
     @Test func pageNavigationMovesThroughLaidOutPagesInOrder() {
         let longText = String(repeating: "Body copy ", count: 2000)
         let document = Document(

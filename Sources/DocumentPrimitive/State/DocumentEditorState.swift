@@ -29,9 +29,11 @@ public final class DocumentEditorState {
     private var sectionDataSources: [SectionID: SectionDataSource] = [:]
     private var pageDataSources: [String: PageScopedDataSource] = [:]
     private var headerFooterDataSources: [String: HeaderFooterDataSource] = [:]
+    private var blockDataSources: [String: BlockDataSource] = [:]
     private var sectionRichTextStates: [SectionID: RichTextState] = [:]
     private var pageRichTextStates: [String: RichTextState] = [:]
     private var headerFooterRichTextStates: [String: RichTextState] = [:]
+    private var blockRichTextStates: [String: RichTextState] = [:]
     private weak var activeEditorRichTextState: RichTextState?
 
     public init(
@@ -102,6 +104,17 @@ public final class DocumentEditorState {
         return source
     }
 
+    public func dataSource(forBlock blockID: BlockID, in sectionID: SectionID) -> BlockDataSource {
+        let key = blockDataSourceKey(for: sectionID, blockID: blockID)
+        if let existing = blockDataSources[key] {
+            return existing
+        }
+
+        let source = BlockDataSource(editorState: self, sectionID: sectionID, blockID: blockID)
+        blockDataSources[key] = source
+        return source
+    }
+
     public func richTextState(forSection sectionID: SectionID) -> RichTextState {
         if let existing = sectionRichTextStates[sectionID] {
             return existing
@@ -140,6 +153,17 @@ public final class DocumentEditorState {
             allowedBlockIDs: [headerFooterBlockID(for: sectionID, slot: slot)]
         )
         headerFooterRichTextStates[key] = state
+        return state
+    }
+
+    public func richTextState(forBlock blockID: BlockID, in sectionID: SectionID) -> RichTextState {
+        let key = blockDataSourceKey(for: sectionID, blockID: blockID)
+        if let existing = blockRichTextStates[key] {
+            return existing
+        }
+
+        let state = makeDerivedRichTextState(allowedBlockIDs: [blockID])
+        blockRichTextStates[key] = state
         return state
     }
 
@@ -319,6 +343,10 @@ public final class DocumentEditorState {
         "\(sectionID.rawValue)#\(slot.rawValue)"
     }
 
+    private func blockDataSourceKey(for sectionID: SectionID, blockID: BlockID) -> String {
+        "\(sectionID.rawValue)#\(blockID.rawValue)"
+    }
+
     private func broadcastSectionMutation(for sectionID: SectionID) {
         sectionDataSources[sectionID]?.emitExternalMutation(.batchUpdate)
 
@@ -328,6 +356,10 @@ public final class DocumentEditorState {
             }) {
                 dataSource.page = refreshedPage
             }
+            dataSource.emitExternalMutation(.batchUpdate)
+        }
+
+        for dataSource in blockDataSources.values where dataSource.sectionID == sectionID {
             dataSource.emitExternalMutation(.batchUpdate)
         }
     }
@@ -353,6 +385,12 @@ public final class DocumentEditorState {
         headerFooterDataSources = headerFooterDataSources.filter { key, _ in
             validSectionIDs.contains(sectionID(fromHeaderFooterKey: key))
         }
+
+        let validBlockKeys = Set(document.sections.flatMap { section in
+            section.blocks.map { blockDataSourceKey(for: section.id, blockID: $0.id) }
+        })
+        blockRichTextStates = blockRichTextStates.filter { validBlockKeys.contains($0.key) }
+        blockDataSources = blockDataSources.filter { validBlockKeys.contains($0.key) }
     }
 
     func pageScrollKey(for page: ComputedPage) -> String {
@@ -910,6 +948,148 @@ public final class PageScopedDataSource: RichTextDataSource {
 
 @MainActor
 @Observable
+public final class BlockDataSource: RichTextDataSource {
+    private unowned let editorState: DocumentEditorState
+    public let sectionID: SectionID
+    public let blockID: BlockID
+
+    private var observers: [UUID: @MainActor (RichTextMutation) -> Void] = [:]
+
+    public init(editorState: DocumentEditorState, sectionID: SectionID, blockID: BlockID) {
+        self.editorState = editorState
+        self.sectionID = sectionID
+        self.blockID = blockID
+    }
+
+    public var blocks: [Block] {
+        if let block = editorState.block(in: sectionID, id: blockID) {
+            return [block]
+        }
+        return []
+    }
+
+    public func block(at index: Int) -> Block {
+        if let block = blocks[safe: index] {
+            return block
+        }
+        return Block(id: blockID, type: .paragraph, content: .text(.plain("")))
+    }
+
+    public func insertBlocks(_ blocks: [Block], at index: Int) {
+        _ = index
+        if let nextFocusedBlockID = replaceCurrentBlock(with: blocks) {
+            let nextEditorState = editorState.richTextState(forBlock: nextFocusedBlockID, in: sectionID)
+            nextEditorState.selection = .caret(nextFocusedBlockID, offset: 0)
+            nextEditorState.focusedBlockID = nextFocusedBlockID
+            editorState.richTextState.selection = .caret(nextFocusedBlockID, offset: 0)
+            editorState.richTextState.focusedBlockID = nextFocusedBlockID
+            editorState.syncCurrentLocation(using: nextEditorState)
+        }
+        notify(.batchUpdate)
+    }
+
+    public func deleteBlocks(at indices: IndexSet) {
+        guard indices.contains(0) else { return }
+        notify(.batchUpdate)
+    }
+
+    public func moveBlocks(from source: IndexSet, to destination: Int) {
+        _ = source
+        _ = destination
+        notify(.batchUpdate)
+    }
+
+    public func replaceBlock(at index: Int, with block: Block) {
+        guard index == 0 else { return }
+        _ = replaceCurrentBlock(with: [block])
+        notify(.blockReplaced(index: 0))
+    }
+
+    public func updateTextContent(blockID: BlockID, content: TextContent) {
+        guard blockID == self.blockID else { return }
+        guard var block = editorState.block(in: sectionID, id: blockID) else { return }
+
+        switch block.content {
+        case .text:
+            block.content = .text(content)
+        case let .heading(_, level):
+            block.content = .heading(content, level: level)
+        case .blockQuote:
+            block.content = .blockQuote(content)
+        case let .list(_, style, indentLevel):
+            block.content = .list(content, style: style, indentLevel: indentLevel)
+        case let .codeBlock(_, language):
+            block.content = .codeBlock(code: content.plainText, language: language)
+        case .table, .image, .divider, .embed:
+            return
+        }
+
+        editorState.replaceBlock(block, in: sectionID)
+        notify(.textUpdated(blockID: blockID))
+    }
+
+    public func updateBlockType(blockID: BlockID, type: BlockType, content: BlockContent) {
+        guard blockID == self.blockID else { return }
+        guard var block = editorState.block(in: sectionID, id: blockID) else { return }
+        block.type = type
+        block.content = content
+        editorState.replaceBlock(block, in: sectionID)
+        notify(.typeChanged(blockID: blockID))
+    }
+
+    public func addMutationObserver(_ observer: @escaping @MainActor (RichTextMutation) -> Void) -> UUID {
+        let id = UUID()
+        observers[id] = observer
+        return id
+    }
+
+    public func removeMutationObserver(_ id: UUID) {
+        observers.removeValue(forKey: id)
+    }
+
+    private func replaceCurrentBlock(with blocks: [Block]) -> BlockID? {
+        guard !blocks.isEmpty else { return nil }
+
+        var updated = editorState.blocks(for: sectionID)
+        if let currentIndex = updated.firstIndex(where: { $0.id == blockID }) {
+            let currentBlock = updated[currentIndex]
+            let replacementBlocks = blocks.enumerated().map { offset, block -> Block in
+                if offset == 0 {
+                    return Block(
+                        id: blockID,
+                        type: block.type,
+                        content: block.content,
+                        metadata: currentBlock.metadata
+                    )
+                }
+                return block
+            }
+
+            updated.remove(at: currentIndex)
+            updated.insert(contentsOf: replacementBlocks, at: currentIndex)
+            editorState.updateSectionBlocks(updated, for: sectionID)
+            return replacementBlocks.dropFirst().first?.id
+        }
+
+        let insertionIndex = min(max(0, updated.count), updated.count)
+        updated.insert(contentsOf: blocks, at: insertionIndex)
+        editorState.updateSectionBlocks(updated, for: sectionID)
+        return blocks.first?.id
+    }
+
+    private func notify(_ mutation: RichTextMutation) {
+        for observer in observers.values {
+            observer(mutation)
+        }
+    }
+
+    fileprivate func emitExternalMutation(_ mutation: RichTextMutation) {
+        notify(mutation)
+    }
+}
+
+@MainActor
+@Observable
 public final class HeaderFooterDataSource: RichTextDataSource {
     private unowned let editorState: DocumentEditorState
     public let sectionID: SectionID
@@ -1034,5 +1214,11 @@ public final class HeaderFooterDataSource: RichTextDataSource {
 
     fileprivate func emitExternalMutation(_ mutation: RichTextMutation) {
         notify(mutation)
+    }
+}
+
+private extension Array {
+    subscript(safe index: Int) -> Element? {
+        indices.contains(index) ? self[index] : nil
     }
 }

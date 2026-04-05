@@ -91,18 +91,7 @@ public struct PageView: View {
         VStack(spacing: 0) {
             Group {
                 if isActive {
-                    let pageEditorState = state.richTextState(forPage: page)
-                    RichTextEditor(
-                        state: pageEditorState,
-                        dataSource: state.dataSource(for: page),
-                        styleSheet: TextStyleSheet.standard
-                    )
-                    .onChange(of: pageEditorState.selection) { _, _ in
-                        state.syncCurrentLocation(using: pageEditorState)
-                    }
-                    .onChange(of: pageEditorState.focusedBlockID) { _, _ in
-                        state.syncCurrentLocation(using: pageEditorState)
-                    }
+                    activePageContent(sectionBlocks: sectionBlocks)
                 } else {
                     HStack(alignment: .top, spacing: page.template.columnSpacing) {
                         ForEach(Array(columnPlacements.enumerated()), id: \.offset) { _, placements in
@@ -163,6 +152,42 @@ public struct PageView: View {
     }
 
     @ViewBuilder
+    private func activePageContent(sectionBlocks: [Block]) -> some View {
+        if sectionBlocks.isEmpty || page.blockPlacements.isEmpty {
+            let pageEditorState = state.richTextState(forPage: page)
+            RichTextEditor(
+                state: pageEditorState,
+                dataSource: state.dataSource(for: page),
+                styleSheet: TextStyleSheet.standard
+            )
+            .onChange(of: pageEditorState.selection) { _, _ in
+                state.syncCurrentLocation(using: pageEditorState)
+            }
+            .onChange(of: pageEditorState.focusedBlockID) { _, _ in
+                state.syncCurrentLocation(using: pageEditorState)
+            }
+        } else {
+            HStack(alignment: .top, spacing: page.template.columnSpacing) {
+                ForEach(Array(columnPlacements.enumerated()), id: \.offset) { _, placements in
+                    VStack(alignment: .leading, spacing: 10) {
+                        ForEach(placements) { placement in
+                            if sectionBlocks.indices.contains(placement.blockIndex) {
+                                activePlacementView(
+                                    for: sectionBlocks[placement.blockIndex],
+                                    placement: placement
+                                )
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
+                }
+            }
+            .padding(.vertical, 8)
+        }
+    }
+
+    @ViewBuilder
     private func headerFooterView(
         content: HeaderFooter?,
         slots: (HeaderFooterSlot, HeaderFooterSlot, HeaderFooterSlot),
@@ -211,6 +236,123 @@ public struct PageView: View {
     private func render(runs: [TextRun]) -> String {
         let resolvedRuns = fieldCodeResolver.resolve(runs: runs, context: fieldContext)
         return resolvedRuns.map(\.text).joined()
+    }
+
+    @ViewBuilder
+    private func activePlacementView(
+        for block: Block,
+        placement: BlockFragmentPlacement
+    ) -> some View {
+        if canInlineEdit(block: block), isEditablePlacement(placement) {
+            placementEditor(for: block, placement: placement)
+        } else {
+            preview(for: blockFragmentResolver.block(for: block, placement: placement))
+        }
+    }
+
+    private func canInlineEdit(block: Block) -> Bool {
+        switch block.content {
+        case .text, .heading, .blockQuote, .codeBlock, .list:
+            true
+        case .table, .image, .divider, .embed:
+            false
+        }
+    }
+
+    private func isEditablePlacement(_ placement: BlockFragmentPlacement) -> Bool {
+        placementCountByBlockID[placement.blockID, default: 0] == 1
+    }
+
+    @ViewBuilder
+    private func placementEditor(
+        for block: Block,
+        placement: BlockFragmentPlacement
+    ) -> some View {
+        let editorState = state.richTextState(forBlock: block.id, in: page.sectionID)
+        let dataSource = state.dataSource(forBlock: block.id, in: page.sectionID)
+        let fullHeight = max(placement.itemHeight, minimumEditorHeight(for: block))
+        let visibleHeight = max(placement.frame.height, minimumEditorHeight(for: block))
+        let offset = editorOffset(for: placement)
+
+        RichTextEditor(
+            state: editorState,
+            dataSource: dataSource,
+            styleSheet: TextStyleSheet.standard
+        )
+        .frame(maxWidth: .infinity, minHeight: fullHeight, maxHeight: fullHeight, alignment: .topLeading)
+        .offset(y: -offset)
+        .frame(maxWidth: .infinity, minHeight: visibleHeight, maxHeight: visibleHeight, alignment: .topLeading)
+        .clipped()
+        .overlay(alignment: .topLeading) {
+            if showsLeadingContinuation(for: placement) {
+                continuationChip(label: "Continued")
+                    .padding(.top, 4)
+            }
+        }
+        .overlay(alignment: .bottomTrailing) {
+            if showsTrailingContinuation(for: placement) {
+                continuationChip(label: "Continues")
+                    .padding(.bottom, 4)
+            }
+        }
+        .onChange(of: editorState.selection) { _, _ in
+            state.syncCurrentLocation(using: editorState)
+        }
+        .onChange(of: editorState.focusedBlockID) { _, _ in
+            state.syncCurrentLocation(using: editorState)
+        }
+    }
+
+    private func minimumEditorHeight(for block: Block) -> CGFloat {
+        switch block.content {
+        case .heading:
+            34
+        case .codeBlock:
+            56
+        default:
+            24
+        }
+    }
+
+    private func editorOffset(for placement: BlockFragmentPlacement) -> CGFloat {
+        guard
+            placement.isPartial,
+            let partialRange = placement.partialRange
+        else {
+            return 0
+        }
+
+        return min(max(partialRange.lowerBound, 0), placement.itemHeight)
+    }
+
+    private func showsLeadingContinuation(for placement: BlockFragmentPlacement) -> Bool {
+        guard
+            placement.isPartial,
+            let partialRange = placement.partialRange
+        else {
+            return false
+        }
+        return partialRange.lowerBound > 0
+    }
+
+    private func showsTrailingContinuation(for placement: BlockFragmentPlacement) -> Bool {
+        guard
+            placement.isPartial,
+            let partialRange = placement.partialRange
+        else {
+            return false
+        }
+        return partialRange.upperBound < placement.itemHeight
+    }
+
+    private func continuationChip(label: String) -> some View {
+        Text(label)
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 3)
+            .background(.background.opacity(0.92))
+            .clipShape(Capsule())
     }
 
     @ViewBuilder
@@ -551,6 +693,12 @@ public struct PageView: View {
             title: state.document.title,
             author: state.document.settings.author
         )
+    }
+
+    private var placementCountByBlockID: [BlockID: Int] {
+        page.blockPlacements.reduce(into: [BlockID: Int]()) { counts, placement in
+            counts[placement.blockID, default: 0] += 1
+        }
     }
 
     private var columnPlacements: [[BlockFragmentPlacement]] {
