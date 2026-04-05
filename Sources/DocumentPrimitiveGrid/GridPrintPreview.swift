@@ -14,10 +14,48 @@ public struct GridDocumentEditor: View {
     public var body: some View {
         switch state.viewMode {
         case .page:
-            GridPrintPreview(state: state)
+            VStack(spacing: 0) {
+                DocumentToolbar(state: state)
+
+                if state.showRuler {
+                    rulerView
+                }
+
+                GridPrintPreview(state: state)
+            }
+            .onAppear {
+                state.layoutEngine.reflow()
+            }
         case .continuous, .canvas:
             DocumentEditor(state: state)
         }
+    }
+
+    private var rulerView: some View {
+        GeometryReader { proxy in
+            let width = proxy.size.width
+            let tickCount = max(Int(width / 24), 1)
+
+            HStack(spacing: 0) {
+                ForEach(0...tickCount, id: \.self) { index in
+                    VStack(spacing: 2) {
+                        Rectangle()
+                            .fill(index.isMultiple(of: 4) ? Color.secondary : Color.secondary.opacity(0.5))
+                            .frame(width: 1, height: index.isMultiple(of: 4) ? 14 : 8)
+                        if index < tickCount, index.isMultiple(of: 4) {
+                            Text("\(index / 4)")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+            }
+            .padding(.horizontal, 20)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        }
+        .frame(height: 28)
+        .background(Color.secondary.opacity(0.08))
     }
 }
 
