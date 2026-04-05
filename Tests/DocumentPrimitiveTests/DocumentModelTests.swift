@@ -115,4 +115,70 @@ struct DocumentModelTests {
         #expect(state.document.section("section")?.headerFooter?.header?.center.first?.text == "Updated Center")
         leftDataSource.removeMutationObserver(observerID)
     }
+
+    @MainActor
+    @Test func evenHeaderFooterDataSourcesWriteSeparateChrome() {
+        let document = Document(
+            title: "Draft",
+            sections: [
+                DocumentSection(
+                    id: "section",
+                    blocks: [Block(id: "b1", type: .paragraph, content: .text(.plain("Hello")))],
+                    headerFooter: HeaderFooterConfig(
+                        header: HeaderFooter(center: [TextRun(text: "Odd Header")]),
+                        footer: HeaderFooter(center: [TextRun(text: "Odd Footer")]),
+                        differentOddEven: true
+                    )
+                ),
+            ]
+        )
+
+        let state = DocumentEditorState(document: document)
+        let evenHeaderSource = state.headerFooterDataSource(for: "section", slot: .evenHeaderCenter)
+        let evenFooterSource = state.headerFooterDataSource(for: "section", slot: .evenFooterCenter)
+        let oddHeaderSource = state.headerFooterDataSource(for: "section", slot: .headerCenter)
+
+        let evenHeaderBlockID = try! #require(evenHeaderSource.blocks.first?.id)
+        let evenFooterBlockID = try! #require(evenFooterSource.blocks.first?.id)
+
+        evenHeaderSource.updateTextContent(blockID: evenHeaderBlockID, content: .plain("Even Header"))
+        evenFooterSource.updateTextContent(blockID: evenFooterBlockID, content: .plain("Even Footer"))
+
+        #expect(state.document.section("section")?.headerFooter?.header?.center.first?.text == "Odd Header")
+        #expect(state.document.section("section")?.headerFooter?.evenHeader?.center.first?.text == "Even Header")
+        #expect(state.document.section("section")?.headerFooter?.evenFooter?.center.first?.text == "Even Footer")
+        #expect(oddHeaderSource.blocks.first?.content.textContent?.plainText == "Odd Header")
+    }
+
+    @MainActor
+    @Test func firstHeaderFooterDataSourcesWriteSeparateChrome() {
+        let document = Document(
+            title: "Draft",
+            sections: [
+                DocumentSection(
+                    id: "section",
+                    blocks: [Block(id: "b1", type: .paragraph, content: .text(.plain("Hello")))],
+                    headerFooter: HeaderFooterConfig(
+                        header: HeaderFooter(center: [TextRun(text: "Default Header")]),
+                        footer: HeaderFooter(center: [TextRun(text: "Default Footer")]),
+                        differentFirstPage: true
+                    )
+                ),
+            ]
+        )
+
+        let state = DocumentEditorState(document: document)
+        let firstHeaderSource = state.headerFooterDataSource(for: "section", slot: .firstHeaderCenter)
+        let firstFooterSource = state.headerFooterDataSource(for: "section", slot: .firstFooterCenter)
+
+        let firstHeaderBlockID = try! #require(firstHeaderSource.blocks.first?.id)
+        let firstFooterBlockID = try! #require(firstFooterSource.blocks.first?.id)
+
+        firstHeaderSource.updateTextContent(blockID: firstHeaderBlockID, content: .plain("First Header"))
+        firstFooterSource.updateTextContent(blockID: firstFooterBlockID, content: .plain("First Footer"))
+
+        #expect(state.document.section("section")?.headerFooter?.firstHeader?.center.first?.text == "First Header")
+        #expect(state.document.section("section")?.headerFooter?.firstFooter?.center.first?.text == "First Footer")
+        #expect(state.document.section("section")?.headerFooter?.header?.center.first?.text == "Default Header")
+    }
 }

@@ -132,4 +132,92 @@ struct MarkdownExporterTests {
         #expect(markdown.contains("I. First note"))
         #expect(markdown.contains("II. Second note"))
     }
+
+    @Test func exportsSeparateOddAndEvenChromeToMarkdown() async throws {
+        let document = Document(
+            title: "Draft",
+            sections: [
+                DocumentSection(
+                    blocks: [
+                        Block(type: .paragraph, content: .text(.plain("Body"))),
+                    ],
+                    headerFooter: HeaderFooterConfig(
+                        header: HeaderFooter(center: [TextRun(text: "Odd header")]),
+                        footer: HeaderFooter(right: [TextRun(text: "Odd footer")]),
+                        evenHeader: HeaderFooter(center: [TextRun(text: "Even header {PAGE}")]),
+                        evenFooter: HeaderFooter(left: [TextRun(text: "Even footer")]),
+                        differentOddEven: true
+                    ),
+                    startPageNumber: 5
+                ),
+            ]
+        )
+
+        let exportable = BlockToExportMapper().map(document: document)
+        let data = try await MarkdownExporter().export(exportable, options: ExportOptions())
+        let markdown = String(decoding: data, as: UTF8.self)
+
+        #expect(markdown.contains("_Odd Header:_ Odd header"))
+        #expect(markdown.contains("_Even Header:_ Even header 6"))
+        #expect(markdown.contains("_Odd Footer:_ Odd footer"))
+        #expect(markdown.contains("_Even Footer:_ Even footer"))
+    }
+
+    @Test func exportsSeparateFirstPageChromeToMarkdown() async throws {
+        let document = Document(
+            title: "Draft",
+            sections: [
+                DocumentSection(
+                    blocks: [
+                        Block(type: .paragraph, content: .text(.plain("Body"))),
+                    ],
+                    headerFooter: HeaderFooterConfig(
+                        firstHeader: HeaderFooter(center: [TextRun(text: "First header {PAGE}")]),
+                        firstFooter: HeaderFooter(center: [TextRun(text: "First footer")]),
+                        header: HeaderFooter(center: [TextRun(text: "Default header")]),
+                        footer: HeaderFooter(center: [TextRun(text: "Default footer")]),
+                        differentFirstPage: true
+                    ),
+                    startPageNumber: 3
+                ),
+            ]
+        )
+
+        let exportable = BlockToExportMapper().map(document: document)
+        let data = try await MarkdownExporter().export(exportable, options: ExportOptions())
+        let markdown = String(decoding: data, as: UTF8.self)
+
+        #expect(markdown.contains("_First Header:_ First header 3"))
+        #expect(markdown.contains("_First Footer:_ First footer"))
+        #expect(markdown.contains("_Header:_ Default header"))
+    }
+
+    @Test func resolvesRepresentativePageNumbersForFirstOddAndEvenChrome() async throws {
+        let document = Document(
+            title: "Draft",
+            sections: [
+                DocumentSection(
+                    blocks: [
+                        Block(type: .paragraph, content: .text(.plain("Body"))),
+                    ],
+                    headerFooter: HeaderFooterConfig(
+                        firstHeader: HeaderFooter(center: [TextRun(text: "First {PAGE}")]),
+                        header: HeaderFooter(center: [TextRun(text: "Odd {PAGE}")]),
+                        evenHeader: HeaderFooter(center: [TextRun(text: "Even {PAGE}")]),
+                        differentFirstPage: true,
+                        differentOddEven: true
+                    ),
+                    startPageNumber: 10
+                ),
+            ]
+        )
+
+        let exportable = BlockToExportMapper().map(document: document)
+        let data = try await MarkdownExporter().export(exportable, options: ExportOptions())
+        let markdown = String(decoding: data, as: UTF8.self)
+
+        #expect(markdown.contains("_First Header:_ First 10"))
+        #expect(markdown.contains("_Odd Header:_ Odd 11"))
+        #expect(markdown.contains("_Even Header:_ Even 12"))
+    }
 }

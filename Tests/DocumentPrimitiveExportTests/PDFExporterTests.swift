@@ -92,6 +92,70 @@ struct PDFExporterTests {
         #expect(firstPage.contains("Footnote body"))
     }
 
+    @Test func exportsSeparateOddAndEvenChromeToPDF() async throws {
+        let document = Document(
+            title: "PDF Draft",
+            sections: [
+                DocumentSection(
+                    blocks: [
+                        Block(type: .paragraph, content: .text(.plain(String(repeating: "Body ", count: 1200)))),
+                    ],
+                    headerFooter: HeaderFooterConfig(
+                        header: HeaderFooter(center: [TextRun(text: "Odd Hdr {PAGE}")]),
+                        footer: HeaderFooter(right: [TextRun(text: "Odd Footer")]),
+                        evenHeader: HeaderFooter(center: [TextRun(text: "Even Hdr {PAGE}")]),
+                        evenFooter: HeaderFooter(left: [TextRun(text: "Even Footer")]),
+                        differentOddEven: true
+                    ),
+                    startPageNumber: 10
+                ),
+            ]
+        )
+
+        let exportable = BlockToExportMapper().map(document: document)
+        let data = try await PDFExporter().export(exportable, options: ExportOptions())
+        let pdf = try #require(PDFDocument(data: data))
+        let firstPage = try #require(pdf.page(at: 0)?.string)
+        let secondPage = try #require(pdf.page(at: 1)?.string)
+
+        #expect(firstPage.contains("Even Hdr 10"))
+        #expect(firstPage.contains("Even Footer"))
+        #expect(secondPage.contains("Odd Hdr 11"))
+        #expect(secondPage.contains("Odd Footer"))
+    }
+
+    @Test func exportsSeparateFirstPageChromeToPDF() async throws {
+        let document = Document(
+            title: "PDF Draft",
+            sections: [
+                DocumentSection(
+                    blocks: [
+                        Block(type: .paragraph, content: .text(.plain(String(repeating: "Body ", count: 1200)))),
+                    ],
+                    headerFooter: HeaderFooterConfig(
+                        firstHeader: HeaderFooter(center: [TextRun(text: "First Hdr {PAGE}")]),
+                        firstFooter: HeaderFooter(center: [TextRun(text: "First Footer")]),
+                        header: HeaderFooter(center: [TextRun(text: "Default Hdr {PAGE}")]),
+                        footer: HeaderFooter(center: [TextRun(text: "Default Footer")]),
+                        differentFirstPage: true
+                    ),
+                    startPageNumber: 3
+                ),
+            ]
+        )
+
+        let exportable = BlockToExportMapper().map(document: document)
+        let data = try await PDFExporter().export(exportable, options: ExportOptions())
+        let pdf = try #require(PDFDocument(data: data))
+        let firstPage = try #require(pdf.page(at: 0)?.string)
+        let secondPage = try #require(pdf.page(at: 1)?.string)
+
+        #expect(firstPage.contains("First Hdr 3"))
+        #expect(firstPage.contains("First Footer"))
+        #expect(secondPage.contains("Default Hdr 4"))
+        #expect(secondPage.contains("Default Footer"))
+    }
+
     @Test func exportsTableCaptionsIntoPDFText() async throws {
         let document = Document(
             title: "PDF Draft",

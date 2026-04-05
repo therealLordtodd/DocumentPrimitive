@@ -14,28 +14,32 @@ public struct PageFlowCalculator: Sendable {
 
     func templateProvider(
         for section: DocumentSection,
-        settings: DocumentSettings
+        settings: DocumentSettings,
+        startPageNumber: Int
     ) -> any PageTemplateProvider {
         SectionTemplateProvider(
             pageSetup: section.pageSetup ?? settings.defaultPageSetup,
             layout: section.columnLayout ?? .single,
-            config: section.headerFooter
+            config: section.headerFooter,
+            startPageNumber: startPageNumber
         )
     }
 
     func template(
         for section: DocumentSection,
-        settings: DocumentSettings
+        settings: DocumentSettings,
+        startPageNumber: Int
     ) -> PageTemplate {
-        templateProvider(for: section, settings: settings)
+        templateProvider(for: section, settings: settings, startPageNumber: startPageNumber)
             .template(forPage: 1, isFirst: true, section: 0)
     }
 
     func measuredBlocks(
         for section: DocumentSection,
-        settings: DocumentSettings
+        settings: DocumentSettings,
+        startPageNumber: Int
     ) -> [MeasuredBlockDescriptor] {
-        let template = template(for: section, settings: settings)
+        let template = template(for: section, settings: settings, startPageNumber: startPageNumber)
         return section.blocks.enumerated().map { index, block in
             let anchoredFootnotes = section.footnotes.filter { $0.anchorBlockID == block.id }
             let height = estimatedHeight(for: block, contentWidth: template.columnWidth)
@@ -66,23 +70,12 @@ public struct PageFlowCalculator: Sendable {
         pageIndexInSection: Int
     ) -> (header: HeaderFooter?, footer: HeaderFooter?) {
         guard let config else { return (nil, nil) }
-
-        var header = config.header
-        var footer = config.footer
-
-        if config.differentFirstPage, pageIndexInSection == 0 {
-            header = nil
-            footer = nil
-        } else if config.differentOddEven, pageNumber.isMultiple(of: 2) {
-            header = header.map { HeaderFooter(left: $0.right, center: $0.center, right: $0.left) }
-            footer = footer.map { HeaderFooter(left: $0.right, center: $0.center, right: $0.left) }
-        }
-
-        return (header, footer)
+        return config.resolvedHeaderFooter(pageNumber: pageNumber, pageIndexInSection: pageIndexInSection)
     }
 
     func footnotes(
         for section: DocumentSection,
+        allSections: [DocumentSection],
         visibleBlockIDs: [BlockID],
         pageIndexInSection: Int,
         pageCountInSection: Int,
@@ -97,7 +90,7 @@ public struct PageFlowCalculator: Sendable {
             return section.footnotes
         case .documentEnd:
             guard isLastSection, pageIndexInSection == pageCountInSection - 1 else { return [] }
-            return section.footnotes
+            return allSections.flatMap(\.footnotes)
         }
     }
 
@@ -170,16 +163,17 @@ private struct SectionTemplateProvider: PageTemplateProvider, Sendable {
     let pageSetup: PageSetup
     let layout: ColumnLayout
     let config: HeaderFooterConfig?
+    let startPageNumber: Int
 
     func template(forPage pageNumber: Int, isFirst: Bool, section: Int) -> PageTemplate {
         _ = section
 
+        let absolutePageNumber = startPageNumber + max(pageNumber - 1, 0)
         let pageIndex = max(pageNumber - 1, 0)
-        let resolved = Self.resolveHeaderFooter(
-            config,
-            pageNumber: pageNumber,
+        let resolved = config?.resolvedHeaderFooter(
+            pageNumber: absolutePageNumber,
             pageIndexInSection: isFirst ? 0 : pageIndex
-        )
+        ) ?? (header: nil, footer: nil)
 
         return pageSetup.pageTemplate(
             columns: layout.columns,
@@ -187,26 +181,5 @@ private struct SectionTemplateProvider: PageTemplateProvider, Sendable {
             headerHeight: resolved.header == nil ? 0 : 36,
             footerHeight: resolved.footer == nil ? 0 : 28
         )
-    }
-
-    private static func resolveHeaderFooter(
-        _ config: HeaderFooterConfig?,
-        pageNumber: Int,
-        pageIndexInSection: Int
-    ) -> (header: HeaderFooter?, footer: HeaderFooter?) {
-        guard let config else { return (nil, nil) }
-
-        var header = config.header
-        var footer = config.footer
-
-        if config.differentFirstPage, pageIndexInSection == 0 {
-            header = nil
-            footer = nil
-        } else if config.differentOddEven, pageNumber.isMultiple(of: 2) {
-            header = header.map { HeaderFooter(left: $0.right, center: $0.center, right: $0.left) }
-            footer = footer.map { HeaderFooter(left: $0.right, center: $0.center, right: $0.left) }
-        }
-
-        return (header, footer)
     }
 }

@@ -89,4 +89,65 @@ struct HTMLExporterTests {
         #expect(html.contains("<caption>Quarterly Results</caption>"))
         #expect(html.contains("<td>Q1</td>"))
     }
+
+    @Test func exportsSeparateOddAndEvenChromeToHTML() async throws {
+        let document = Document(
+            title: "Draft",
+            sections: [
+                DocumentSection(
+                    blocks: [
+                        Block(type: .paragraph, content: .text(.plain("Body"))),
+                    ],
+                    headerFooter: HeaderFooterConfig(
+                        header: HeaderFooter(center: [TextRun(text: "Odd header")]),
+                        footer: HeaderFooter(right: [TextRun(text: "Odd footer")]),
+                        evenHeader: HeaderFooter(center: [TextRun(text: "Even header {PAGE}")]),
+                        evenFooter: HeaderFooter(left: [TextRun(text: "Even footer")]),
+                        differentOddEven: true
+                    ),
+                    startPageNumber: 5
+                ),
+            ]
+        )
+
+        let exportable = BlockToExportMapper().map(document: document)
+        let data = try await HTMLExporter().export(exportable, options: ExportOptions())
+        let html = String(decoding: data, as: UTF8.self)
+
+        #expect(html.contains("data-page-variant=\"odd\""))
+        #expect(html.contains("data-page-variant=\"even\""))
+        #expect(html.contains("Odd header"))
+        #expect(html.contains("Even header 6"))
+        #expect(html.contains("Even footer"))
+    }
+
+    @Test func exportsSeparateFirstPageChromeToHTML() async throws {
+        let document = Document(
+            title: "Draft",
+            sections: [
+                DocumentSection(
+                    blocks: [
+                        Block(type: .paragraph, content: .text(.plain("Body"))),
+                    ],
+                    headerFooter: HeaderFooterConfig(
+                        firstHeader: HeaderFooter(center: [TextRun(text: "First header {PAGE}")]),
+                        firstFooter: HeaderFooter(center: [TextRun(text: "First footer")]),
+                        header: HeaderFooter(center: [TextRun(text: "Default header")]),
+                        footer: HeaderFooter(center: [TextRun(text: "Default footer")]),
+                        differentFirstPage: true
+                    ),
+                    startPageNumber: 3
+                ),
+            ]
+        )
+
+        let exportable = BlockToExportMapper().map(document: document)
+        let data = try await HTMLExporter().export(exportable, options: ExportOptions())
+        let html = String(decoding: data, as: UTF8.self)
+
+        #expect(html.contains("data-page-variant=\"first\""))
+        #expect(html.contains("First header 3"))
+        #expect(html.contains("First footer"))
+        #expect(html.contains("Default header"))
+    }
 }

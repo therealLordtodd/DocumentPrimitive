@@ -122,6 +122,7 @@ public struct PDFExporter: DocumentExporter {
         let footnoteConfiguration = document.footnoteConfiguration
 
         for (sectionIndex, section) in document.sections.enumerated() {
+            let sectionStart = section.startPageNumber ?? nextPageNumber
             let template = pageTemplate(from: section.pageTemplate)
             let descriptors = measuredBlocks(
                 for: section.blocks,
@@ -129,7 +130,11 @@ public struct PDFExporter: DocumentExporter {
                 footnotes: section.footnotes,
                 footnoteConfiguration: footnoteConfiguration
             )
-            let provider = SectionTemplateProvider(template: template, headerFooter: section.headerFooter)
+            let provider = SectionTemplateProvider(
+                template: template,
+                headerFooter: section.headerFooter,
+                startPageNumber: sectionStart
+            )
             let pages = try await paginate(
                 descriptors: descriptors,
                 templateProvider: provider,
@@ -137,7 +142,6 @@ public struct PDFExporter: DocumentExporter {
             )
             let descriptorByID = Dictionary(uniqueKeysWithValues: descriptors.map { ($0.item.id, $0) })
             let rawPages = pages.isEmpty ? [PaginationPrimitive.ComputedPage(pageNumber: 1, template: provider.template(forPage: 1, isFirst: true, section: sectionIndex))] : pages
-            let sectionStart = section.startPageNumber ?? nextPageNumber
 
             for (pageIndex, page) in rawPages.enumerated() {
                 let visibleSourceIdentifiers = Set(
@@ -371,17 +375,12 @@ public struct PDFExporter: DocumentExporter {
     }
 
     private func resolvedHeaderFooter(for page: PreparedPDFPage) -> ExportHeaderFooterConfiguration? {
-        guard var config = page.headerFooter else { return nil }
-
-        if config.differentFirstPage, page.pageIndexInSection == 0 {
-            config.header = nil
-            config.footer = nil
-        } else if config.differentOddEven, page.pageNumber.isMultiple(of: 2) {
-            config.header = config.header.map { ExportHeaderFooter(left: $0.right, center: $0.center, right: $0.left) }
-            config.footer = config.footer.map { ExportHeaderFooter(left: $0.right, center: $0.center, right: $0.left) }
-        }
-
-        return config
+        guard let config = page.headerFooter else { return nil }
+        let resolved = config.resolvedHeaderFooter(
+            pageNumber: page.pageNumber,
+            pageIndexInSection: page.pageIndexInSection
+        )
+        return ExportHeaderFooterConfiguration(header: resolved.header, footer: resolved.footer)
     }
 
     private func resolvedTextContent(
@@ -1179,17 +1178,21 @@ private struct PDFTableLayout {
 private struct SectionTemplateProvider: PageTemplateProvider, Sendable {
     var template: PageTemplate
     var headerFooter: ExportHeaderFooterConfiguration?
+    var startPageNumber: Int
 
     func template(forPage pageNumber: Int, isFirst: Bool, section: Int) -> PageTemplate {
-        _ = pageNumber
         _ = section
 
-        guard let headerFooter else { return template }
-        guard headerFooter.differentFirstPage, isFirst else { return template }
-
         var adjusted = template
-        adjusted.headerHeight = 0
-        adjusted.footerHeight = 0
+        let absolutePageNumber = startPageNumber + max(pageNumber - 1, 0)
+        let pageIndex = max(pageNumber - 1, 0)
+        let resolved = headerFooter?.resolvedHeaderFooter(
+            pageNumber: absolutePageNumber,
+            pageIndexInSection: isFirst ? 0 : pageIndex
+        )
+
+        adjusted.headerHeight = resolved?.header == nil ? 0 : template.headerHeight
+        adjusted.footerHeight = resolved?.footer == nil ? 0 : template.footerHeight
         return adjusted
     }
 }

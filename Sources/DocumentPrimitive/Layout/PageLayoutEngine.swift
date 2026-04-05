@@ -23,16 +23,36 @@ public final class PageLayoutEngine {
         var nextPageNumber = 1
 
         for (sectionIndex, section) in document.sections.enumerated() {
-            let descriptors = calculator.measuredBlocks(for: section, settings: document.settings)
-            let templateProvider = calculator.templateProvider(for: section, settings: document.settings)
+            let sectionStartPage = section.startPageNumber ?? nextPageNumber
+            let descriptors = calculator.measuredBlocks(
+                for: section,
+                settings: document.settings,
+                startPageNumber: sectionStartPage
+            )
+            let templateProvider = calculator.templateProvider(
+                for: section,
+                settings: document.settings,
+                startPageNumber: sectionStartPage
+            )
             let engine = PaginationEngine(templateProvider: templateProvider)
             engine.paginate(descriptors.map(\.item), section: sectionIndex)
 
-            let sectionStartPage = section.startPageNumber ?? nextPageNumber
             let descriptorByItemID = Dictionary(uniqueKeysWithValues: descriptors.map { ($0.item.id, $0) })
 
             for (pageIndex, rawPage) in engine.pages.enumerated() {
                 let pageNumber = sectionStartPage + pageIndex
+                let blockPlacements = rawPage.placements.compactMap { placement -> BlockFragmentPlacement? in
+                    guard let descriptor = descriptorByItemID[placement.itemID] else { return nil }
+                    return BlockFragmentPlacement(
+                        id: placement.itemID,
+                        blockID: descriptor.blockID,
+                        blockIndex: descriptor.blockIndex,
+                        frame: placement.frame,
+                        isPartial: placement.isPartial,
+                        partialRange: placement.partialRange,
+                        itemHeight: descriptor.item.height
+                    )
+                }
                 let blockIndices = rawPage.placements.compactMap { placement in
                     descriptorByItemID[placement.itemID]?.blockIndex
                 }
@@ -43,6 +63,7 @@ public final class PageLayoutEngine {
                 }
                 let footnotes = calculator.footnotes(
                     for: section,
+                    allSections: document.sections,
                     visibleBlockIDs: visibleBlockIDs,
                     pageIndexInSection: pageIndex,
                     pageCountInSection: engine.pages.count,
@@ -66,6 +87,7 @@ public final class PageLayoutEngine {
                         template: rawPage.template,
                         blockRanges: ranges,
                         placements: rawPage.placements,
+                        blockPlacements: blockPlacements,
                         footnotes: footnotes,
                         header: headerFooter.header,
                         footer: headerFooter.footer

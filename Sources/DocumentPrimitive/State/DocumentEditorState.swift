@@ -101,7 +101,21 @@ public final class DocumentEditorState {
     ) -> [TextRun] {
         guard let section = document.section(sectionID) else { return [] }
         let config = section.headerFooter ?? HeaderFooterConfig()
-        let target = slot.isHeader ? (config.header ?? HeaderFooter()) : (config.footer ?? HeaderFooter())
+        let target: HeaderFooter
+        switch (slot.variant, slot.isHeader) {
+        case (.first, true):
+            target = config.firstHeader ?? HeaderFooter()
+        case (.first, false):
+            target = config.firstFooter ?? HeaderFooter()
+        case (.primary, true):
+            target = config.header ?? HeaderFooter()
+        case (.primary, false):
+            target = config.footer ?? HeaderFooter()
+        case (.even, true):
+            target = config.evenHeader ?? HeaderFooter()
+        case (.even, false):
+            target = config.evenFooter ?? HeaderFooter()
+        }
 
         switch slot.alignment {
         case .left:
@@ -121,8 +135,24 @@ public final class DocumentEditorState {
         guard let index = document.sectionIndex(sectionID) else { return }
 
         var config = document.sections[index].headerFooter ?? HeaderFooterConfig()
+        if slot.variant == .first {
+            config.differentFirstPage = true
+        }
+        if slot.variant == .even {
+            config.differentOddEven = true
+        }
+
         if slot.isHeader {
-            var header = config.header ?? HeaderFooter()
+            var header: HeaderFooter
+            switch slot.variant {
+            case .first:
+                header = config.firstHeader ?? HeaderFooter()
+            case .primary:
+                header = config.header ?? HeaderFooter()
+            case .even:
+                header = config.evenHeader ?? HeaderFooter()
+            }
+
             switch slot.alignment {
             case .left:
                 header.left = runs
@@ -131,9 +161,26 @@ public final class DocumentEditorState {
             case .right:
                 header.right = runs
             }
-            config.header = header
+
+            switch slot.variant {
+            case .first:
+                config.firstHeader = header
+            case .primary:
+                config.header = header
+            case .even:
+                config.evenHeader = header
+            }
         } else {
-            var footer = config.footer ?? HeaderFooter()
+            var footer: HeaderFooter
+            switch slot.variant {
+            case .first:
+                footer = config.firstFooter ?? HeaderFooter()
+            case .primary:
+                footer = config.footer ?? HeaderFooter()
+            case .even:
+                footer = config.evenFooter ?? HeaderFooter()
+            }
+
             switch slot.alignment {
             case .left:
                 footer.left = runs
@@ -142,7 +189,15 @@ public final class DocumentEditorState {
             case .right:
                 footer.right = runs
             }
-            config.footer = footer
+
+            switch slot.variant {
+            case .first:
+                config.firstFooter = footer
+            case .primary:
+                config.footer = footer
+            case .even:
+                config.evenFooter = footer
+            }
         }
 
         document.sections[index].headerFooter = config
@@ -185,31 +240,66 @@ public enum HeaderFooterAlignment: String, Sendable, Codable {
     case right
 }
 
+public enum HeaderFooterVariant: String, Sendable, Codable {
+    case first
+    case primary
+    case even
+}
+
 public enum HeaderFooterSlot: String, Sendable, Codable {
+    case firstHeaderLeft
+    case firstHeaderCenter
+    case firstHeaderRight
     case headerLeft
     case headerCenter
     case headerRight
+    case firstFooterLeft
+    case firstFooterCenter
+    case firstFooterRight
     case footerLeft
     case footerCenter
     case footerRight
+    case evenHeaderLeft
+    case evenHeaderCenter
+    case evenHeaderRight
+    case evenFooterLeft
+    case evenFooterCenter
+    case evenFooterRight
 
     var isHeader: Bool {
         switch self {
-        case .headerLeft, .headerCenter, .headerRight:
+        case .firstHeaderLeft, .firstHeaderCenter, .firstHeaderRight,
+             .headerLeft, .headerCenter, .headerRight,
+             .evenHeaderLeft, .evenHeaderCenter, .evenHeaderRight:
             true
-        case .footerLeft, .footerCenter, .footerRight:
+        case .firstFooterLeft, .firstFooterCenter, .firstFooterRight,
+             .footerLeft, .footerCenter, .footerRight,
+             .evenFooterLeft, .evenFooterCenter, .evenFooterRight:
             false
         }
     }
 
     var alignment: HeaderFooterAlignment {
         switch self {
-        case .headerLeft, .footerLeft:
+        case .firstHeaderLeft, .headerLeft, .firstFooterLeft, .footerLeft, .evenHeaderLeft, .evenFooterLeft:
             .left
-        case .headerCenter, .footerCenter:
+        case .firstHeaderCenter, .headerCenter, .firstFooterCenter, .footerCenter, .evenHeaderCenter, .evenFooterCenter:
             .center
-        case .headerRight, .footerRight:
+        case .firstHeaderRight, .headerRight, .firstFooterRight, .footerRight, .evenHeaderRight, .evenFooterRight:
             .right
+        }
+    }
+
+    var variant: HeaderFooterVariant {
+        switch self {
+        case .firstHeaderLeft, .firstHeaderCenter, .firstHeaderRight,
+             .firstFooterLeft, .firstFooterCenter, .firstFooterRight:
+            .first
+        case .headerLeft, .headerCenter, .headerRight, .footerLeft, .footerCenter, .footerRight:
+            .primary
+        case .evenHeaderLeft, .evenHeaderCenter, .evenHeaderRight,
+             .evenFooterLeft, .evenFooterCenter, .evenFooterRight:
+            .even
         }
     }
 }
@@ -432,7 +522,17 @@ public final class PageScopedDataSource: RichTextDataSource {
     }
 
     private func visibleSectionIndices() -> [Int] {
-        page.blockRanges.flatMap { range in
+        if !page.blockPlacements.isEmpty {
+            var seen: Set<Int> = []
+            return page.blockPlacements.compactMap { placement in
+                if seen.insert(placement.blockIndex).inserted {
+                    return placement.blockIndex
+                }
+                return nil
+            }
+        }
+
+        return page.blockRanges.flatMap { range in
             Array(range.startIndex...range.endIndex)
         }
     }

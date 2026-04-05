@@ -41,18 +41,42 @@ public struct HTMLExporter: DocumentExporter {
         var continuousFootnoteNumber = 1
 
         for (sectionIndex, section) in document.sections.enumerated() {
-            let context = fieldContext(
+            let baseContext = fieldContext(
                 for: document,
                 sectionIndex: sectionIndex,
                 sectionStartPages: sectionStartPages,
                 totalPageCount: totalPageCount
             )
+            let firstContext = variantFieldContext(
+                from: baseContext,
+                configuration: section.headerFooter,
+                sectionStartPage: sectionStartPages[sectionIndex],
+                variant: .first
+            )
+            let primaryContext = variantFieldContext(
+                from: baseContext,
+                configuration: section.headerFooter,
+                sectionStartPage: sectionStartPages[sectionIndex],
+                variant: .primary
+            )
+            let evenContext = variantFieldContext(
+                from: baseContext,
+                configuration: section.headerFooter,
+                sectionStartPage: sectionStartPages[sectionIndex],
+                variant: .even
+            )
 
             var parts: [String] = []
 
-            if let header = render(headerFooter: section.headerFooter?.header, role: "header", context: context) {
-                parts.append(header)
-            }
+            parts.append(
+                contentsOf: renderHeaderFooterConfiguration(
+                    section.headerFooter,
+                    role: "header",
+                    primaryContext: primaryContext,
+                    firstContext: firstContext,
+                    evenContext: evenContext
+                )
+            )
 
             let blocks = section.blocks.map(render(block:)).joined(separator: "\n")
             if !blocks.isEmpty {
@@ -70,9 +94,15 @@ public struct HTMLExporter: DocumentExporter {
                 parts.append(footnotes)
             }
 
-            if let footer = render(headerFooter: section.headerFooter?.footer, role: "footer", context: context) {
-                parts.append(footer)
-            }
+            parts.append(
+                contentsOf: renderHeaderFooterConfiguration(
+                    section.headerFooter,
+                    role: "footer",
+                    primaryContext: primaryContext,
+                    firstContext: firstContext,
+                    evenContext: evenContext
+                )
+            )
 
             continuousFootnoteNumber += section.footnotes.count
 
@@ -153,6 +183,52 @@ public struct HTMLExporter: DocumentExporter {
           <div class="\(role)-right">\(right)</div>
         </\(role)>
         """
+    }
+
+    private func renderHeaderFooterConfiguration(
+        _ configuration: ExportHeaderFooterConfiguration?,
+        role: String,
+        primaryContext: FieldResolutionContext,
+        firstContext: FieldResolutionContext,
+        evenContext: FieldResolutionContext
+    ) -> [String] {
+        guard let configuration else { return [] }
+
+        let firstHeaderFooter: ExportHeaderFooter?
+        let primaryHeaderFooter: ExportHeaderFooter?
+        let evenHeaderFooter: ExportHeaderFooter?
+        switch role {
+        case "header":
+            firstHeaderFooter = configuration.firstHeader
+            primaryHeaderFooter = configuration.header
+            evenHeaderFooter = configuration.evenHeader
+        case "footer":
+            firstHeaderFooter = configuration.firstFooter
+            primaryHeaderFooter = configuration.footer
+            evenHeaderFooter = configuration.evenFooter
+        default:
+            firstHeaderFooter = nil
+            primaryHeaderFooter = nil
+            evenHeaderFooter = nil
+        }
+
+        var rendered: [String] = []
+        if configuration.differentFirstPage,
+           let first = render(headerFooter: firstHeaderFooter, role: role, context: firstContext) {
+            rendered.append(markingVariant(first, role: role, variant: "first"))
+        }
+
+        if let primary = render(headerFooter: primaryHeaderFooter, role: role, context: primaryContext) {
+            let variant = configuration.differentOddEven ? "odd" : "primary"
+            rendered.append(markingVariant(primary, role: role, variant: variant))
+        }
+
+        if configuration.differentOddEven,
+           let even = render(headerFooter: evenHeaderFooter, role: role, context: evenContext) {
+            rendered.append(markingVariant(even, role: role, variant: "even"))
+        }
+
+        return rendered
     }
 
     private func renderFootnotes(
@@ -247,6 +323,54 @@ public struct HTMLExporter: DocumentExporter {
         )
     }
 
+    private func variantFieldContext(
+        from context: FieldResolutionContext,
+        configuration: ExportHeaderFooterConfiguration?,
+        sectionStartPage: Int,
+        variant: ExportHeaderFooterPageVariant
+    ) -> FieldResolutionContext {
+        let pageNumber = representativePageNumber(
+            configuration: configuration,
+            sectionStartPage: sectionStartPage,
+            variant: variant
+        )
+        return FieldResolutionContext(
+            pageNumber: pageNumber,
+            pageCount: context.pageCount,
+            sectionNumber: context.sectionNumber,
+            date: context.date,
+            title: context.title,
+            author: context.author
+        )
+    }
+
+    private func representativePageNumber(
+        configuration: ExportHeaderFooterConfiguration?,
+        sectionStartPage: Int,
+        variant: ExportHeaderFooterPageVariant
+    ) -> Int {
+        let startPage = max(sectionStartPage, 1)
+        guard let configuration else { return startPage }
+
+        for candidate in startPage..<(startPage + 6) {
+            let pageIndex = candidate - startPage
+            let resolvedVariant: ExportHeaderFooterPageVariant
+            if configuration.differentFirstPage, pageIndex == 0 {
+                resolvedVariant = .first
+            } else if configuration.differentOddEven, candidate.isMultiple(of: 2) {
+                resolvedVariant = .even
+            } else {
+                resolvedVariant = .primary
+            }
+
+            if resolvedVariant == variant {
+                return candidate
+            }
+        }
+
+        return startPage
+    }
+
     private func sectionStartPages(for sections: [ExportSection]) -> [Int] {
         var pages: [Int] = []
         var nextPage = 1
@@ -271,6 +395,12 @@ public struct HTMLExporter: DocumentExporter {
             value = "<a href=\"\(escape(link.absoluteString))\">\(value)</a>"
         }
         return value
+    }
+
+    private func markingVariant(_ markup: String, role: String, variant: String) -> String {
+        let openingTag = "<\(role)"
+        let replacement = "<\(role) data-page-variant=\"\(variant)\""
+        return markup.replacingOccurrences(of: openingTag, with: replacement, options: [.anchored])
     }
 
     private func imageSource(data: Data?, url: URL?) -> String {
@@ -312,4 +442,10 @@ public struct HTMLExporter: DocumentExporter {
             .replacingOccurrences(of: ">", with: "&gt;")
             .replacingOccurrences(of: "\"", with: "&quot;")
     }
+}
+
+private enum ExportHeaderFooterPageVariant {
+    case first
+    case primary
+    case even
 }

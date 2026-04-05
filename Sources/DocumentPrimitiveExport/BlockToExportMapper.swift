@@ -52,8 +52,8 @@ public struct BlockToExportMapper: Sendable {
         let template = pageSetup.pageTemplate(
             columns: layout.columns,
             columnSpacing: layout.spacing,
-            headerHeight: headerFooter?.header == nil ? 0 : 36,
-            footerHeight: headerFooter?.footer == nil ? 0 : 28
+            headerHeight: headerFooter?.hasAnyHeaderContent == true ? 36 : 0,
+            footerHeight: headerFooter?.hasAnyFooterContent == true ? 28 : 0
         )
 
         return ExportSection(
@@ -151,8 +151,12 @@ public struct BlockToExportMapper: Sendable {
         guard let config else { return nil }
 
         return ExportHeaderFooterConfiguration(
+            firstHeader: config.firstHeader.map(exportHeaderFooter(_:)),
+            firstFooter: config.firstFooter.map(exportHeaderFooter(_:)),
             header: config.header.map(exportHeaderFooter(_:)),
             footer: config.footer.map(exportHeaderFooter(_:)),
+            evenHeader: config.evenHeader.map(exportHeaderFooter(_:)),
+            evenFooter: config.evenFooter.map(exportHeaderFooter(_:)),
             differentFirstPage: config.differentFirstPage,
             differentOddEven: config.differentOddEven
         )

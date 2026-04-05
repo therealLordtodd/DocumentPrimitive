@@ -29,20 +29,44 @@ public struct MarkdownExporter: DocumentExporter {
         var continuousFootnoteNumber = 1
 
         for (sectionIndex, section) in document.sections.enumerated() {
-            let context = fieldContext(
+            let baseContext = fieldContext(
                 for: document,
                 sectionIndex: sectionIndex,
                 sectionStartPages: sectionStartPages,
                 totalPageCount: totalPageCount
+            )
+            let firstContext = variantFieldContext(
+                from: baseContext,
+                configuration: section.headerFooter,
+                sectionStartPage: sectionStartPages[sectionIndex],
+                variant: .first
+            )
+            let primaryContext = variantFieldContext(
+                from: baseContext,
+                configuration: section.headerFooter,
+                sectionStartPage: sectionStartPages[sectionIndex],
+                variant: .primary
+            )
+            let evenContext = variantFieldContext(
+                from: baseContext,
+                configuration: section.headerFooter,
+                sectionStartPage: sectionStartPages[sectionIndex],
+                variant: .even
             )
 
             var sectionParts: [String] = [
                 "<!-- section \(sectionIndex + 1) start-page: \(sectionStartPages[sectionIndex]) columns: \(section.pageTemplate.columns) -->",
             ]
 
-            if let header = render(headerFooter: section.headerFooter?.header, label: "Header", context: context) {
-                sectionParts.append(header)
-            }
+            sectionParts.append(
+                contentsOf: renderHeaderFooterConfiguration(
+                    section.headerFooter,
+                    label: "Header",
+                    primaryContext: primaryContext,
+                    firstContext: firstContext,
+                    evenContext: evenContext
+                )
+            )
 
             let blocks = section.blocks.map(render(block:)).joined(separator: "\n\n")
             if !blocks.isEmpty {
@@ -59,9 +83,15 @@ public struct MarkdownExporter: DocumentExporter {
                 sectionParts.append(footnotes)
             }
 
-            if let footer = render(headerFooter: section.headerFooter?.footer, label: "Footer", context: context) {
-                sectionParts.append(footer)
-            }
+            sectionParts.append(
+                contentsOf: renderHeaderFooterConfiguration(
+                    section.headerFooter,
+                    label: "Footer",
+                    primaryContext: primaryContext,
+                    firstContext: firstContext,
+                    evenContext: evenContext
+                )
+            )
 
             continuousFootnoteNumber += section.footnotes.count
             renderedSections.append(sectionParts.joined(separator: "\n\n"))
@@ -136,6 +166,52 @@ public struct MarkdownExporter: DocumentExporter {
 
         guard !columns.isEmpty else { return nil }
         return "_\(label):_ " + columns.joined(separator: " | ")
+    }
+
+    private func renderHeaderFooterConfiguration(
+        _ configuration: ExportHeaderFooterConfiguration?,
+        label: String,
+        primaryContext: FieldResolutionContext,
+        firstContext: FieldResolutionContext,
+        evenContext: FieldResolutionContext
+    ) -> [String] {
+        guard let configuration else { return [] }
+
+        let firstHeaderFooter: ExportHeaderFooter?
+        let primaryHeaderFooter: ExportHeaderFooter?
+        let evenHeaderFooter: ExportHeaderFooter?
+        switch label {
+        case "Header":
+            firstHeaderFooter = configuration.firstHeader
+            primaryHeaderFooter = configuration.header
+            evenHeaderFooter = configuration.evenHeader
+        case "Footer":
+            firstHeaderFooter = configuration.firstFooter
+            primaryHeaderFooter = configuration.footer
+            evenHeaderFooter = configuration.evenFooter
+        default:
+            firstHeaderFooter = nil
+            primaryHeaderFooter = nil
+            evenHeaderFooter = nil
+        }
+
+        var rendered: [String] = []
+        if configuration.differentFirstPage,
+           let first = render(headerFooter: firstHeaderFooter, label: "First \(label)", context: firstContext) {
+            rendered.append(first)
+        }
+
+        let primaryLabel = configuration.differentOddEven ? "Odd \(label)" : label
+        if let primary = render(headerFooter: primaryHeaderFooter, label: primaryLabel, context: primaryContext) {
+            rendered.append(primary)
+        }
+
+        if configuration.differentOddEven,
+           let even = render(headerFooter: evenHeaderFooter, label: "Even \(label)", context: evenContext) {
+            rendered.append(even)
+        }
+
+        return rendered
     }
 
     private func renderFootnotes(
@@ -225,6 +301,54 @@ public struct MarkdownExporter: DocumentExporter {
         )
     }
 
+    private func variantFieldContext(
+        from context: FieldResolutionContext,
+        configuration: ExportHeaderFooterConfiguration?,
+        sectionStartPage: Int,
+        variant: ExportHeaderFooterPageVariant
+    ) -> FieldResolutionContext {
+        let pageNumber = representativePageNumber(
+            configuration: configuration,
+            sectionStartPage: sectionStartPage,
+            variant: variant
+        )
+        return FieldResolutionContext(
+            pageNumber: pageNumber,
+            pageCount: context.pageCount,
+            sectionNumber: context.sectionNumber,
+            date: context.date,
+            title: context.title,
+            author: context.author
+        )
+    }
+
+    private func representativePageNumber(
+        configuration: ExportHeaderFooterConfiguration?,
+        sectionStartPage: Int,
+        variant: ExportHeaderFooterPageVariant
+    ) -> Int {
+        let startPage = max(sectionStartPage, 1)
+        guard let configuration else { return startPage }
+
+        for candidate in startPage..<(startPage + 6) {
+            let pageIndex = candidate - startPage
+            let resolvedVariant: ExportHeaderFooterPageVariant
+            if configuration.differentFirstPage, pageIndex == 0 {
+                resolvedVariant = .first
+            } else if configuration.differentOddEven, candidate.isMultiple(of: 2) {
+                resolvedVariant = .even
+            } else {
+                resolvedVariant = .primary
+            }
+
+            if resolvedVariant == variant {
+                return candidate
+            }
+        }
+
+        return startPage
+    }
+
     private func sectionStartPages(for sections: [ExportSection]) -> [Int] {
         var pages: [Int] = []
         var nextPage = 1
@@ -248,4 +372,10 @@ public struct MarkdownExporter: DocumentExporter {
         }
         return value
     }
+}
+
+private enum ExportHeaderFooterPageVariant {
+    case first
+    case primary
+    case even
 }

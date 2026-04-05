@@ -19,8 +19,12 @@ struct BlockToExportMapperTests {
                     ],
                     pageSetup: PageSetup(pageSize: .a4),
                     headerFooter: HeaderFooterConfig(
+                        firstHeader: HeaderFooter(left: [TextRun(text: "First Hdr")]),
+                        firstFooter: HeaderFooter(center: [TextRun(text: "First Ftr")]),
                         header: HeaderFooter(center: [TextRun(text: "Hdr {PAGE}")]),
                         footer: HeaderFooter(right: [TextRun(text: "{TITLE}")]),
+                        evenHeader: HeaderFooter(center: [TextRun(text: "Even Hdr {PAGE}")]),
+                        evenFooter: HeaderFooter(left: [TextRun(text: "{AUTHOR}")]),
                         differentFirstPage: true,
                         differentOddEven: true
                     ),
@@ -62,8 +66,12 @@ struct BlockToExportMapperTests {
         #expect(section.startPageNumber == 5)
         #expect(section.headerFooter?.differentFirstPage == true)
         #expect(section.headerFooter?.differentOddEven == true)
+        #expect(section.headerFooter?.firstHeader?.left.plainText == "First Hdr")
+        #expect(section.headerFooter?.firstFooter?.center.plainText == "First Ftr")
         #expect(section.headerFooter?.header?.center.plainText == "Hdr {PAGE}")
         #expect(section.headerFooter?.footer?.right.plainText == "{TITLE}")
+        #expect(section.headerFooter?.evenHeader?.center.plainText == "Even Hdr {PAGE}")
+        #expect(section.headerFooter?.evenFooter?.left.plainText == "{AUTHOR}")
         #expect(section.footnotes.first?.anchorSourceIdentifier == "IntroAnchor")
         #expect(section.footnotes.first?.content.plainText == "Footnote body")
     }

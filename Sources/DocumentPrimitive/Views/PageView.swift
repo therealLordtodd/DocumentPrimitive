@@ -1,10 +1,18 @@
+import Foundation
 import RichTextPrimitive
 import SwiftUI
+#if canImport(AppKit)
+import AppKit
+#elseif canImport(UIKit)
+import UIKit
+#endif
 
 public struct PageView: View {
     @Bindable private var state: DocumentEditorState
     private let page: ComputedPage
     private let fieldCodeResolver = FieldCodeResolver()
+    private let footnoteDisplayResolver = FootnoteDisplayResolver()
+    private let blockFragmentResolver = BlockFragmentResolver()
 
     public init(state: DocumentEditorState, page: ComputedPage) {
         self.state = state
@@ -14,12 +22,6 @@ public struct PageView: View {
     public var body: some View {
         let section = state.document.section(page.sectionID)
         let sectionBlocks = section?.blocks ?? []
-        let visibleBlocks: [Block] = page.blockRanges.reduce(into: []) { partialResult, range in
-            guard !sectionBlocks.isEmpty else { return }
-            let start = min(max(range.startIndex, 0), sectionBlocks.count - 1)
-            let end = min(max(range.endIndex, start), sectionBlocks.count - 1)
-            partialResult.append(contentsOf: sectionBlocks[start...end])
-        }
         let isActivePage = state.currentPage == page.pageNumber && state.currentSection == page.sectionID
         let footnoteHeight = footnoteAreaHeight
         let contentBodyHeight = max(page.template.contentHeight - footnoteHeight, 120)
@@ -29,7 +31,7 @@ public struct PageView: View {
                 .frame(width: page.template.contentWidth, height: page.template.headerHeight, alignment: .bottom)
                 .padding(.top, page.template.margins.top)
 
-            contentArea(visibleBlocks: visibleBlocks, isActive: isActivePage, contentBodyHeight: contentBodyHeight)
+            contentArea(sectionBlocks: sectionBlocks, isActive: isActivePage, contentBodyHeight: contentBodyHeight)
                 .frame(width: page.template.contentWidth, height: page.template.contentHeight, alignment: .top)
 
             pageFooter(isActive: isActivePage)
@@ -61,7 +63,7 @@ public struct PageView: View {
         if page.template.headerHeight > 0 || page.header != nil || isActive {
             headerFooterView(
                 content: page.header,
-                slots: (.headerLeft, .headerCenter, .headerRight),
+                slots: headerSlots,
                 isActive: isActive
             )
         }
@@ -72,7 +74,7 @@ public struct PageView: View {
         if page.template.footerHeight > 0 || page.footer != nil || isActive {
             headerFooterView(
                 content: page.footer,
-                slots: (.footerLeft, .footerCenter, .footerRight),
+                slots: footerSlots,
                 isActive: isActive
             )
         }
@@ -80,10 +82,12 @@ public struct PageView: View {
 
     @ViewBuilder
     private func contentArea(
-        visibleBlocks: [Block],
+        sectionBlocks: [Block],
         isActive: Bool,
         contentBodyHeight: CGFloat
     ) -> some View {
+        let displayedFootnoteGroups = footnoteDisplayResolver.groups(for: page, document: state.document)
+
         VStack(spacing: 0) {
             Group {
                 if isActive {
@@ -93,10 +97,22 @@ public struct PageView: View {
                         styleSheet: TextStyleSheet.standard
                     )
                 } else {
-                    VStack(alignment: .leading, spacing: 10) {
-                        ForEach(visibleBlocks) { block in
-                            preview(for: block)
-                                .frame(maxWidth: .infinity, alignment: .leading)
+                    HStack(alignment: .top, spacing: page.template.columnSpacing) {
+                        ForEach(Array(columnPlacements.enumerated()), id: \.offset) { _, placements in
+                            VStack(alignment: .leading, spacing: 10) {
+                                ForEach(placements) { placement in
+                                    if sectionBlocks.indices.contains(placement.blockIndex) {
+                                        preview(
+                                            for: blockFragmentResolver.block(
+                                                for: sectionBlocks[placement.blockIndex],
+                                                placement: placement
+                                            )
+                                        )
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                    }
+                                }
+                            }
+                            .frame(maxWidth: .infinity, alignment: .topLeading)
                         }
                     }
                     .padding(.vertical, 8)
@@ -105,14 +121,31 @@ public struct PageView: View {
             .frame(maxWidth: .infinity, maxHeight: contentBodyHeight, alignment: .topLeading)
             .clipped()
 
-            if !page.footnotes.isEmpty {
+            if !displayedFootnoteGroups.isEmpty {
                 Divider()
                     .padding(.vertical, 6)
 
                 VStack(alignment: .leading, spacing: 4) {
-                    ForEach(page.footnotes) { footnote in
-                        previewText(for: footnote.content, fallbackSize: 11)
+                    ForEach(displayedFootnoteGroups) { group in
+                        if let title = group.title {
+                            Text(title)
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                                .padding(.top, 2)
+                        }
+
+                        ForEach(group.footnotes) { footnote in
+                            HStack(alignment: .top, spacing: 6) {
+                                Text(footnote.marker)
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(.secondary)
+                                    .frame(minWidth: 24, alignment: .leading)
+
+                                previewText(for: footnote.content, fallbackSize: 11)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
                             .frame(maxWidth: .infinity, alignment: .leading)
+                        }
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -214,36 +247,32 @@ public struct PageView: View {
             }
             .padding(.leading, CGFloat(indentLevel) * 18)
         case let .table(table):
-            VStack(spacing: 0) {
-                ForEach(Array(table.rows.enumerated()), id: \.offset) { _, row in
-                    HStack(spacing: 0) {
-                        ForEach(Array(row.enumerated()), id: \.offset) { _, cell in
-                            previewText(for: cell, fallbackSize: 13)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(8)
-                                .overlay {
-                                    Rectangle()
-                                        .stroke(Color.secondary.opacity(0.18), lineWidth: 1)
-                                }
+            VStack(alignment: .leading, spacing: 6) {
+                if let caption = table.caption {
+                    previewText(for: caption, fallbackSize: 12, defaultWeight: .semibold)
+                        .foregroundStyle(.secondary)
+                }
+
+                VStack(spacing: 0) {
+                    ForEach(Array(table.rows.enumerated()), id: \.offset) { _, row in
+                        HStack(spacing: 0) {
+                            ForEach(Array(row.enumerated()), id: \.offset) { _, cell in
+                                previewText(for: cell, fallbackSize: 13)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding(8)
+                                    .overlay {
+                                        Rectangle()
+                                            .stroke(Color.secondary.opacity(0.18), lineWidth: 1)
+                                    }
+                            }
                         }
                     }
                 }
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             }
-            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         case let .image(content):
             VStack(spacing: 8) {
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(LinearGradient(
-                        colors: [Color.secondary.opacity(0.14), Color.secondary.opacity(0.05)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    ))
-                    .frame(height: min(content.size?.height ?? 180, 240))
-                    .overlay {
-                        Image(systemName: "photo")
-                            .font(.system(size: 28))
-                            .foregroundStyle(.secondary)
-                    }
+                imagePreview(for: content)
 
                 if let altText = content.altText, !altText.isEmpty {
                     Text(altText)
@@ -327,6 +356,76 @@ public struct PageView: View {
         TextContent(runs: fieldCodeResolver.resolve(runs: content.runs, context: fieldContext))
     }
 
+    @ViewBuilder
+    private func imagePreview(for content: ImageContent) -> some View {
+        let previewHeight = min(content.size?.height ?? 180, 240)
+
+        if let image = resolvedImage(from: content) {
+            image
+                .resizable()
+                .scaledToFit()
+                .frame(maxWidth: .infinity, maxHeight: previewHeight)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        } else if let url = content.url {
+            AsyncImage(url: url) { phase in
+                switch phase {
+                case let .success(image):
+                    image
+                        .resizable()
+                        .scaledToFit()
+                case .failure:
+                    placeholderImagePreview(height: previewHeight, label: "Image unavailable")
+                case .empty:
+                    placeholderImagePreview(height: previewHeight, label: "Loading image...")
+                @unknown default:
+                    placeholderImagePreview(height: previewHeight, label: nil)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: previewHeight)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        } else {
+            placeholderImagePreview(height: previewHeight, label: nil)
+        }
+    }
+
+    @ViewBuilder
+    private func placeholderImagePreview(height: CGFloat, label: String?) -> some View {
+        RoundedRectangle(cornerRadius: 14, style: .continuous)
+            .fill(LinearGradient(
+                colors: [Color.secondary.opacity(0.14), Color.secondary.opacity(0.05)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            ))
+            .frame(height: height)
+            .overlay {
+                VStack(spacing: 8) {
+                    Image(systemName: "photo")
+                        .font(.system(size: 28))
+                        .foregroundStyle(.secondary)
+
+                    if let label {
+                        Text(label)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+    }
+
+    private func resolvedImage(from content: ImageContent) -> Image? {
+        guard let data = content.data else { return nil }
+
+        #if canImport(AppKit)
+        guard let image = NSImage(data: data) else { return nil }
+        return Image(nsImage: image)
+        #elseif canImport(UIKit)
+        guard let image = UIImage(data: data) else { return nil }
+        return Image(uiImage: image)
+        #else
+        return nil
+        #endif
+    }
+
     private func headingSize(level: Int) -> CGFloat {
         switch level {
         case 1: 28
@@ -351,19 +450,77 @@ public struct PageView: View {
 
     private func slotPlaceholder(for slot: HeaderFooterSlot) -> String {
         switch slot {
+        case .firstHeaderLeft:
+            "First header left"
+        case .firstHeaderCenter:
+            "First header center"
+        case .firstHeaderRight:
+            "First header right"
         case .headerLeft:
             "Header left"
         case .headerCenter:
             "Header center"
         case .headerRight:
             "Header right"
+        case .firstFooterLeft:
+            "First footer left"
+        case .firstFooterCenter:
+            "First footer center"
+        case .firstFooterRight:
+            "First footer right"
         case .footerLeft:
             "Footer left"
         case .footerCenter:
             "Footer center"
         case .footerRight:
             "Footer right"
+        case .evenHeaderLeft:
+            "Even header left"
+        case .evenHeaderCenter:
+            "Even header center"
+        case .evenHeaderRight:
+            "Even header right"
+        case .evenFooterLeft:
+            "Even footer left"
+        case .evenFooterCenter:
+            "Even footer center"
+        case .evenFooterRight:
+            "Even footer right"
         }
+    }
+
+    private var isFirstPageInSection: Bool {
+        state.layoutEngine.pages.first(where: { $0.sectionID == page.sectionID })?.pageNumber == page.pageNumber
+    }
+
+    private var usesFirstHeaderFooterSlots: Bool {
+        guard let config = state.document.section(page.sectionID)?.headerFooter else { return false }
+        return config.differentFirstPage && isFirstPageInSection
+    }
+
+    private var usesEvenHeaderFooterSlots: Bool {
+        guard let config = state.document.section(page.sectionID)?.headerFooter else { return false }
+        return !usesFirstHeaderFooterSlots && config.differentOddEven && page.pageNumber.isMultiple(of: 2)
+    }
+
+    private var headerSlots: (HeaderFooterSlot, HeaderFooterSlot, HeaderFooterSlot) {
+        if usesFirstHeaderFooterSlots {
+            return (.firstHeaderLeft, .firstHeaderCenter, .firstHeaderRight)
+        }
+        if usesEvenHeaderFooterSlots {
+            return (.evenHeaderLeft, .evenHeaderCenter, .evenHeaderRight)
+        }
+        return (.headerLeft, .headerCenter, .headerRight)
+    }
+
+    private var footerSlots: (HeaderFooterSlot, HeaderFooterSlot, HeaderFooterSlot) {
+        if usesFirstHeaderFooterSlots {
+            return (.firstFooterLeft, .firstFooterCenter, .firstFooterRight)
+        }
+        if usesEvenHeaderFooterSlots {
+            return (.evenFooterLeft, .evenFooterCenter, .evenFooterRight)
+        }
+        return (.footerLeft, .footerCenter, .footerRight)
     }
 
     private var footnoteAreaHeight: CGFloat {
@@ -386,5 +543,28 @@ public struct PageView: View {
             title: state.document.title,
             author: state.document.settings.author
         )
+    }
+
+    private var columnPlacements: [[BlockFragmentPlacement]] {
+        let columnCount = max(page.template.columns, 1)
+        guard columnCount > 1 else { return [page.blockPlacements] }
+
+        let columnWidthWithSpacing = max(page.template.columnWidth + page.template.columnSpacing, 1)
+        var columns = Array(repeating: [BlockFragmentPlacement](), count: columnCount)
+
+        for placement in page.blockPlacements {
+            let rawColumn = Int((placement.frame.minX / columnWidthWithSpacing).rounded(.down))
+            let columnIndex = min(max(rawColumn, 0), columnCount - 1)
+            columns[columnIndex].append(placement)
+        }
+
+        return columns.map { placements in
+            placements.sorted {
+                if $0.frame.minY == $1.frame.minY {
+                    return $0.frame.minX < $1.frame.minX
+                }
+                return $0.frame.minY < $1.frame.minY
+            }
+        }
     }
 }

@@ -1,6 +1,7 @@
 import CoreGraphics
 import Foundation
 import PaginationPrimitive
+import RichTextPrimitive
 
 public struct BlockRange: Sendable, Equatable {
     public var startIndex: Int
@@ -12,6 +13,34 @@ public struct BlockRange: Sendable, Equatable {
     }
 }
 
+public struct BlockFragmentPlacement: Identifiable, Sendable, Equatable {
+    public let id: UUID
+    public var blockID: BlockID
+    public var blockIndex: Int
+    public var frame: CGRect
+    public var isPartial: Bool
+    public var partialRange: ClosedRange<CGFloat>?
+    public var itemHeight: CGFloat
+
+    public init(
+        id: UUID,
+        blockID: BlockID,
+        blockIndex: Int,
+        frame: CGRect,
+        isPartial: Bool = false,
+        partialRange: ClosedRange<CGFloat>? = nil,
+        itemHeight: CGFloat
+    ) {
+        self.id = id
+        self.blockID = blockID
+        self.blockIndex = blockIndex
+        self.frame = frame
+        self.isPartial = isPartial
+        self.partialRange = partialRange
+        self.itemHeight = itemHeight
+    }
+}
+
 public struct ComputedPage: Identifiable, Sendable, Equatable {
     public let id: UUID
     public var sectionID: SectionID
@@ -19,6 +48,7 @@ public struct ComputedPage: Identifiable, Sendable, Equatable {
     public var template: PageTemplate
     public var blockRanges: [BlockRange]
     public var placements: [PagePlacement]
+    public var blockPlacements: [BlockFragmentPlacement]
     public var footnotes: [Footnote]
     public var header: HeaderFooter?
     public var footer: HeaderFooter?
@@ -39,6 +69,7 @@ public struct ComputedPage: Identifiable, Sendable, Equatable {
         template: PageTemplate = .letter,
         blockRanges: [BlockRange],
         placements: [PagePlacement] = [],
+        blockPlacements: [BlockFragmentPlacement] = [],
         footnotes: [Footnote] = [],
         header: HeaderFooter? = nil,
         footer: HeaderFooter? = nil
@@ -49,6 +80,7 @@ public struct ComputedPage: Identifiable, Sendable, Equatable {
         self.template = template
         self.blockRanges = blockRanges
         self.placements = placements
+        self.blockPlacements = blockPlacements
         self.footnotes = footnotes
         self.header = header
         self.footer = footer
