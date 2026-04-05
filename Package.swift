@@ -48,6 +48,11 @@ let package = Package(
                     package: "GridPrimitive",
                     condition: .when(platforms: [.macOS])
                 ),
+                .product(
+                    name: "GridPrimitiveTable",
+                    package: "GridPrimitive",
+                    condition: .when(platforms: [.macOS])
+                ),
             ]
         ),
         .target(

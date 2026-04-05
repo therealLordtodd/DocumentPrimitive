@@ -85,5 +85,42 @@ struct GridTableAdapterTests {
         #expect(content.caption?.plainText == "Sheet")
         #expect(content.rows.first?.last?.plainText == "v27")
     }
+
+    @MainActor
+    @Test func gridTableEditorModelPublishesMutationsBackToTableContent() {
+        var emittedTables: [TableContent] = []
+        let model = GridTableEditorModel(
+            table: TableContent(
+                rows: [[.plain("Original")]],
+                caption: .plain("Inventory")
+            ),
+            editable: true
+        ) { emittedTables.append($0) }
+
+        model.dataSource.updateCell(CellAddress(column: "A", row: "1"), value: .text("Updated"))
+
+        #expect(emittedTables.last?.caption?.plainText == "Inventory")
+        #expect(emittedTables.last?.rows.first?.first?.plainText == "Updated")
+    }
+
+    @MainActor
+    @Test func gridTableEditorModelRebuildsForExternalTableChanges() {
+        let model = GridTableEditorModel(
+            table: TableContent(rows: [[.plain("One")]]),
+            editable: false
+        )
+
+        model.updateTable(
+            TableContent(
+                rows: [[.plain("A"), .plain("B"), .plain("C")]],
+                columnWidths: [100, 120, 140],
+                caption: .plain("Rebuilt")
+            )
+        )
+
+        #expect(model.dataSource.columns.map(\.id.rawValue) == ["A", "B", "C"])
+        #expect(model.table.caption?.plainText == "Rebuilt")
+        #expect(model.dataSource.row(at: 0).cells["C"] == .text("C"))
+    }
 }
 #endif
