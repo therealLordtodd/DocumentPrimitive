@@ -22,25 +22,33 @@ public final class PageLayoutEngine {
 
         var nextPageNumber = 1
 
-        for section in document.sections {
+        for (sectionIndex, section) in document.sections.enumerated() {
             let descriptors = calculator.measuredBlocks(for: section, settings: document.settings)
-            let template = calculator.template(for: section, settings: document.settings)
-            let engine = PaginationEngine(template: template)
-            engine.paginate(descriptors.map(\.item))
+            let templateProvider = calculator.templateProvider(for: section, settings: document.settings)
+            let engine = PaginationEngine(templateProvider: templateProvider)
+            engine.paginate(descriptors.map(\.item), section: sectionIndex)
 
             let sectionStartPage = section.startPageNumber ?? nextPageNumber
+            let descriptorByItemID = Dictionary(uniqueKeysWithValues: descriptors.map { ($0.item.id, $0) })
 
             for (pageIndex, rawPage) in engine.pages.enumerated() {
                 let pageNumber = sectionStartPage + pageIndex
                 let blockIndices = rawPage.placements.compactMap { placement in
-                    descriptors.first(where: { $0.item.id == placement.itemID })?.blockIndex
+                    descriptorByItemID[placement.itemID]?.blockIndex
                 }
                 let uniqueIndices = Array(Set(blockIndices)).sorted()
-                let ranges = uniqueIndices.map { BlockRange(startIndex: $0, endIndex: $0) }
+                let ranges = coalescedRanges(from: uniqueIndices)
                 let visibleBlockIDs = uniqueIndices.compactMap { index in
                     section.blocks.indices.contains(index) ? section.blocks[index].id : nil
                 }
-                let footnotes = section.footnotes.filter { visibleBlockIDs.contains($0.anchorBlockID) }
+                let footnotes = calculator.footnotes(
+                    for: section,
+                    visibleBlockIDs: visibleBlockIDs,
+                    pageIndexInSection: pageIndex,
+                    pageCountInSection: engine.pages.count,
+                    isLastSection: sectionIndex == document.sections.count - 1,
+                    settings: document.settings
+                )
                 let headerFooter = calculator.headerFooter(
                     for: section.headerFooter,
                     pageNumber: pageNumber,
@@ -55,7 +63,9 @@ public final class PageLayoutEngine {
                     ComputedPage(
                         sectionID: section.id,
                         pageNumber: pageNumber,
+                        template: rawPage.template,
                         blockRanges: ranges,
+                        placements: rawPage.placements,
                         footnotes: footnotes,
                         header: headerFooter.header,
                         footer: headerFooter.footer
@@ -69,5 +79,27 @@ public final class PageLayoutEngine {
 
     public func pageNumber(for blockID: BlockID) -> Int? {
         blockPageMap[blockID]
+    }
+
+    private func coalescedRanges(from indices: [Int]) -> [BlockRange] {
+        guard let first = indices.first else { return [] }
+
+        var ranges: [BlockRange] = []
+        var start = first
+        var previous = first
+
+        for index in indices.dropFirst() {
+            if index == previous + 1 {
+                previous = index
+                continue
+            }
+
+            ranges.append(BlockRange(startIndex: start, endIndex: previous))
+            start = index
+            previous = index
+        }
+
+        ranges.append(BlockRange(startIndex: start, endIndex: previous))
+        return ranges
     }
 }
