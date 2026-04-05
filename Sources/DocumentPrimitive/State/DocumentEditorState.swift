@@ -1209,28 +1209,36 @@ public final class HeaderFooterDataSource: RichTextDataSource {
     }
 
     private func replaceContent(with blocks: [Block]) {
-        let runs = blocks.compactMap { block -> [TextRun]? in
-            switch block.content {
-            case let .text(content),
-                 let .heading(content, _),
-                 let .blockQuote(content),
-                 let .list(content, _, _):
-                return content.runs
-            case let .codeBlock(code, _):
-                return [TextRun(text: code)]
-            case let .table(table):
-                return [TextRun(text: table.caption?.plainText ?? table.rows.flatMap { $0 }.map(\.plainText).joined(separator: " "))]
-            case let .image(image):
-                return [TextRun(text: image.altText ?? "")]
-            case .divider:
-                return []
-            case let .embed(embed):
-                return [TextRun(text: embed.payload ?? "")]
-            }
-        }
-        .flatMap { $0 }
+        let runs = joinedRuns(from: blocks)
 
         editorState.updateHeaderFooterRuns(runs, for: sectionID, slot: slot)
+    }
+
+    private func joinedRuns(from blocks: [Block]) -> [TextRun] {
+        blocks.enumerated().flatMap { index, block in
+            let separator = index < blocks.count - 1 ? [TextRun(text: "\n")] : []
+            return runs(for: block) + separator
+        }
+    }
+
+    private func runs(for block: Block) -> [TextRun] {
+        switch block.content {
+        case let .text(content),
+             let .heading(content, _),
+             let .blockQuote(content),
+             let .list(content, _, _):
+            return content.runs
+        case let .codeBlock(code, _):
+            return [TextRun(text: code)]
+        case let .table(table):
+            return [TextRun(text: table.caption?.plainText ?? table.rows.flatMap { $0 }.map(\.plainText).joined(separator: " "))]
+        case let .image(image):
+            return [TextRun(text: image.altText ?? "")]
+        case .divider:
+            return []
+        case let .embed(embed):
+            return [TextRun(text: embed.payload ?? "")]
+        }
     }
 
     private func notify(_ mutation: RichTextMutation) {

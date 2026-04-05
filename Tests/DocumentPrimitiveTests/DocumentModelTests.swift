@@ -183,6 +183,34 @@ struct DocumentModelTests {
     }
 
     @MainActor
+    @Test func headerFooterInsertBlocksPreservesParagraphBreaks() {
+        let state = DocumentEditorState(
+            document: Document(
+                title: "Draft",
+                sections: [
+                    DocumentSection(
+                        id: "section",
+                        blocks: [Block(id: "body", type: .paragraph, content: .text(.plain("Hello")))]
+                    ),
+                ]
+            )
+        )
+        let headerSource = state.headerFooterDataSource(for: "section", slot: .headerCenter)
+
+        headerSource.insertBlocks(
+            [
+                Block(id: "first", type: .paragraph, content: .text(.plain("Line one"))),
+                Block(id: "second", type: .paragraph, content: .text(.plain("Line two"))),
+            ],
+            at: 0
+        )
+
+        let runs = state.document.section("section")?.headerFooter?.header?.center ?? []
+        #expect(TextContent(runs: runs).plainText == "Line one\nLine two")
+        #expect(headerSource.blocks.first?.content.textContent?.plainText == "Line one\nLine two")
+    }
+
+    @MainActor
     @Test func selectionOffsetTracksCurrentPageAcrossSplitBlocks() {
         let longText = String(repeating: "Split me across pages ", count: 2500)
         let document = Document(
