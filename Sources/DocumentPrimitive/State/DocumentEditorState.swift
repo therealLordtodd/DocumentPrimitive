@@ -990,6 +990,33 @@ public final class BlockDataSource: RichTextDataSource {
 
     public func deleteBlocks(at indices: IndexSet) {
         guard indices.contains(0) else { return }
+        var updated = editorState.blocks(for: sectionID)
+        guard let currentIndex = updated.firstIndex(where: { $0.id == blockID }) else { return }
+        let currentBlock = updated[currentIndex]
+        updated.remove(at: currentIndex)
+
+        let nextFocusedBlockID: BlockID
+        if updated.isEmpty {
+            let replacement = Block(
+                id: blockID,
+                type: .paragraph,
+                content: .text(.plain("")),
+                metadata: currentBlock.metadata
+            )
+            updated = [replacement]
+            nextFocusedBlockID = replacement.id
+        } else {
+            let nextIndex = min(currentIndex, updated.count - 1)
+            nextFocusedBlockID = updated[nextIndex].id
+        }
+
+        editorState.updateSectionBlocks(updated, for: sectionID)
+        let nextEditorState = editorState.richTextState(forBlock: nextFocusedBlockID, in: sectionID)
+        nextEditorState.selection = .caret(nextFocusedBlockID, offset: 0)
+        nextEditorState.focusedBlockID = nextFocusedBlockID
+        editorState.richTextState.selection = .caret(nextFocusedBlockID, offset: 0)
+        editorState.richTextState.focusedBlockID = nextFocusedBlockID
+        editorState.syncCurrentLocation(using: nextEditorState)
         notify(.batchUpdate)
     }
 

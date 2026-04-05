@@ -368,6 +368,66 @@ struct DocumentModelTests {
     }
 
     @MainActor
+    @Test func blockDataSourceDeleteRemovesBlockAndFocusesNextSibling() {
+        let state = DocumentEditorState(
+            document: Document(
+                title: "Draft",
+                sections: [
+                    DocumentSection(
+                        id: "section",
+                        blocks: [
+                            Block(id: "first", type: .paragraph, content: .text(.plain("First"))),
+                            Block(id: "second", type: .paragraph, content: .text(.plain("Second"))),
+                        ]
+                    ),
+                ]
+            )
+        )
+        let dataSource = state.dataSource(forBlock: "first", in: "section")
+
+        dataSource.deleteBlocks(at: IndexSet(integer: 0))
+
+        let blocks = state.document.section("section")?.blocks ?? []
+        #expect(blocks.map(\.id) == ["second"])
+        #expect(state.richTextState.focusedBlockID == "second")
+        #expect(state.richTextState.selection == .caret("second", offset: 0))
+    }
+
+    @MainActor
+    @Test func blockDataSourceDeleteLeavesEmptyParagraphWhenRemovingLastBlock() {
+        let state = DocumentEditorState(
+            document: Document(
+                title: "Draft",
+                sections: [
+                    DocumentSection(
+                        id: "section",
+                        blocks: [
+                            Block(
+                                id: "only",
+                                type: .paragraph,
+                                content: .text(.plain("Only")),
+                                metadata: BlockMetadata(custom: ["sticky": .bool(true)])
+                            ),
+                        ]
+                    ),
+                ]
+            )
+        )
+        let dataSource = state.dataSource(forBlock: "only", in: "section")
+
+        dataSource.deleteBlocks(at: IndexSet(integer: 0))
+
+        let blocks = state.document.section("section")?.blocks ?? []
+        #expect(blocks.count == 1)
+        #expect(blocks[0].id == "only")
+        #expect(blocks[0].type == .paragraph)
+        #expect(blocks[0].content.textContent?.plainText == "")
+        #expect(blocks[0].metadata.custom["sticky"] == .bool(true))
+        #expect(state.richTextState.focusedBlockID == "only")
+        #expect(state.richTextState.selection == .caret("only", offset: 0))
+    }
+
+    @MainActor
     @Test func pageNavigationMovesThroughLaidOutPagesInOrder() {
         let longText = String(repeating: "Body copy ", count: 2000)
         let document = Document(
