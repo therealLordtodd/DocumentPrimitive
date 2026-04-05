@@ -95,12 +95,10 @@ public struct PageView: View {
                 } else {
                     VStack(alignment: .leading, spacing: 10) {
                         ForEach(visibleBlocks) { block in
-                            Text(block.content.textContent?.plainText ?? block.type.rawValue)
+                            preview(for: block)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
                     }
-                    .font(.body)
-                    .foregroundStyle(.primary)
                     .padding(.vertical, 8)
                 }
             }
@@ -113,8 +111,7 @@ public struct PageView: View {
 
                 VStack(alignment: .leading, spacing: 4) {
                     ForEach(page.footnotes) { footnote in
-                        Text(footnote.content.plainText)
-                            .font(.footnote)
+                        previewText(for: footnote.content, fallbackSize: 11)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
@@ -173,6 +170,183 @@ public struct PageView: View {
     private func render(runs: [TextRun]) -> String {
         let resolvedRuns = fieldCodeResolver.resolve(runs: runs, context: fieldContext)
         return resolvedRuns.map(\.text).joined()
+    }
+
+    @ViewBuilder
+    private func preview(for block: Block) -> some View {
+        switch block.content {
+        case let .text(content):
+            previewText(for: content)
+        case let .heading(content, level):
+            previewText(
+                for: content,
+                fallbackSize: headingSize(level: level),
+                defaultWeight: .bold
+            )
+            .padding(.top, level <= 2 ? 8 : 4)
+        case let .blockQuote(content):
+            HStack(alignment: .top, spacing: 10) {
+                RoundedRectangle(cornerRadius: 2, style: .continuous)
+                    .fill(Color.secondary.opacity(0.35))
+                    .frame(width: 4)
+
+                previewText(for: content, fallbackSize: 14)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.vertical, 4)
+        case let .codeBlock(code, _):
+            ScrollView(.horizontal, showsIndicators: false) {
+                Text(verbatim: code)
+                    .font(.system(size: 12, design: .monospaced))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(12)
+            }
+            .background(Color.secondary.opacity(0.08))
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        case let .list(content, style, indentLevel):
+            HStack(alignment: .top, spacing: 8) {
+                Text(listPrefix(for: style))
+                    .font(.body.weight(.semibold))
+                    .frame(width: 20, alignment: .leading)
+
+                previewText(for: content)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(.leading, CGFloat(indentLevel) * 18)
+        case let .table(table):
+            VStack(spacing: 0) {
+                ForEach(Array(table.rows.enumerated()), id: \.offset) { _, row in
+                    HStack(spacing: 0) {
+                        ForEach(Array(row.enumerated()), id: \.offset) { _, cell in
+                            previewText(for: cell, fallbackSize: 13)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(8)
+                                .overlay {
+                                    Rectangle()
+                                        .stroke(Color.secondary.opacity(0.18), lineWidth: 1)
+                                }
+                        }
+                    }
+                }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        case let .image(content):
+            VStack(spacing: 8) {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(LinearGradient(
+                        colors: [Color.secondary.opacity(0.14), Color.secondary.opacity(0.05)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ))
+                    .frame(height: min(content.size?.height ?? 180, 240))
+                    .overlay {
+                        Image(systemName: "photo")
+                            .font(.system(size: 28))
+                            .foregroundStyle(.secondary)
+                    }
+
+                if let altText = content.altText, !altText.isEmpty {
+                    Text(altText)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        case .divider:
+            Divider()
+                .padding(.vertical, 8)
+        case let .embed(embed):
+            VStack(alignment: .leading, spacing: 6) {
+                Text(embed.kind.uppercased())
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Text(embed.payload ?? "[Embedded content]")
+                    .font(.body)
+            }
+            .padding(12)
+            .background(Color.secondary.opacity(0.06))
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        }
+    }
+
+    private func previewText(
+        for content: TextContent,
+        fallbackSize: CGFloat = 14,
+        defaultWeight: Font.Weight = .regular,
+        defaultDesign: Font.Design = .default
+    ) -> Text {
+        let resolved = resolvedTextContent(content)
+        return resolved.runs.reduce(Text("")) { partial, run in
+            partial + previewText(
+                for: run,
+                fallbackSize: fallbackSize,
+                defaultWeight: defaultWeight,
+                defaultDesign: defaultDesign
+            )
+        }
+    }
+
+    private func previewText(
+        for run: TextRun,
+        fallbackSize: CGFloat,
+        defaultWeight: Font.Weight,
+        defaultDesign: Font.Design
+    ) -> Text {
+        let size = run.attributes.fontSize ?? fallbackSize
+        let design: Font.Design = run.attributes.code ? .monospaced : defaultDesign
+
+        let font: Font = if let family = run.attributes.fontFamily, !family.isEmpty {
+            .custom(family, size: size)
+        } else {
+            .system(size: size, weight: run.attributes.bold ? .bold : defaultWeight, design: design)
+        }
+
+        var text = Text(verbatim: run.text).font(font)
+
+        if run.attributes.bold {
+            text = text.bold()
+        }
+        if run.attributes.italic {
+            text = text.italic()
+        }
+        if run.attributes.underline || run.attributes.link != nil {
+            text = text.underline()
+        }
+        if run.attributes.strikethrough {
+            text = text.strikethrough()
+        }
+        if let color = run.attributes.color {
+            text = text.foregroundColor(color.swiftUIColor)
+        } else if run.attributes.link != nil {
+            text = text.foregroundColor(.blue)
+        }
+
+        return text
+    }
+
+    private func resolvedTextContent(_ content: TextContent) -> TextContent {
+        TextContent(runs: fieldCodeResolver.resolve(runs: content.runs, context: fieldContext))
+    }
+
+    private func headingSize(level: Int) -> CGFloat {
+        switch level {
+        case 1: 28
+        case 2: 24
+        case 3: 20
+        case 4: 18
+        case 5: 16
+        default: 15
+        }
+    }
+
+    private func listPrefix(for style: RichTextPrimitive.ListStyle) -> String {
+        switch style {
+        case .bullet:
+            "•"
+        case .numbered:
+            "1."
+        case .checklist:
+            "□"
+        }
     }
 
     private func slotPlaceholder(for slot: HeaderFooterSlot) -> String {
