@@ -30,7 +30,14 @@ struct BlockToExportMapperTests {
                         Footnote(anchorBlockID: "IntroAnchor", content: .plain("Footnote body")),
                     ]
                 ),
-            ]
+            ],
+            settings: DocumentSettings(
+                footnoteConfig: FootnoteConfig(
+                    placement: .pageBottom,
+                    numberingStyle: .roman,
+                    restartPerSection: false
+                )
+            )
         )
 
         var updatedDocument = document
@@ -46,6 +53,8 @@ struct BlockToExportMapperTests {
         #expect(exportable.blocks.count == 2)
         #expect(exportable.sections.count == 1)
         #expect(exportable.footnoteConfiguration?.placement == .pageBottom)
+        #expect(exportable.footnoteConfiguration?.numberingStyle == .roman)
+        #expect(exportable.footnoteConfiguration?.restartPerSection == false)
         #expect(section.blocks.count == 2)
         #expect(section.blocks.first?.sourceIdentifier == "IntroAnchor")
         #expect(section.pageTemplate.columns == 2)

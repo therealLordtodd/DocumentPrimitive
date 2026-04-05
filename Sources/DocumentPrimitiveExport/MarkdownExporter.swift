@@ -53,7 +53,8 @@ public struct MarkdownExporter: DocumentExporter {
                let footnotes = renderFootnotes(
                 section.footnotes,
                 title: "Footnotes",
-                startingAt: configuration.restartPerSection ? 1 : continuousFootnoteNumber
+                startingAt: configuration.restartPerSection ? 1 : continuousFootnoteNumber,
+                configuration: configuration
                ) {
                 sectionParts.append(footnotes)
             }
@@ -140,13 +141,15 @@ public struct MarkdownExporter: DocumentExporter {
     private func renderFootnotes(
         _ footnotes: [ExportFootnote],
         title: String,
-        startingAt startNumber: Int
+        startingAt startNumber: Int,
+        configuration: ExportFootnoteConfiguration
     ) -> String? {
         guard !footnotes.isEmpty else { return nil }
 
         let items = footnotes.enumerated().map { offset, footnote in
             let number = startNumber + offset
-            return "\(number). \(render(text: footnote.content))"
+            let marker = configuration.numberingStyle.render(number: number)
+            return "\(formattedFootnoteMarker(marker, style: configuration.numberingStyle))\(render(text: footnote.content))"
         }.joined(separator: "\n")
 
         return """
@@ -166,7 +169,8 @@ public struct MarkdownExporter: DocumentExporter {
                 guard let footnotes = renderFootnotes(
                     section.footnotes,
                     title: "Section \(index + 1) Footnotes",
-                    startingAt: 1
+                    startingAt: 1,
+                    configuration: configuration
                 ) else {
                     return nil
                 }
@@ -180,8 +184,19 @@ public struct MarkdownExporter: DocumentExporter {
         return renderFootnotes(
             sections.flatMap(\.footnotes),
             title: "Document Footnotes",
-            startingAt: 1
+            startingAt: 1,
+            configuration: configuration
         )
+    }
+
+    private func formattedFootnoteMarker(
+        _ marker: String,
+        style: ExportNumberingStyle
+    ) -> String {
+        if style == .symbol {
+            return "\(marker) "
+        }
+        return "\(marker). "
     }
 
     private func resolved(text: ExportTextContent, context: FieldResolutionContext) -> ExportTextContent {

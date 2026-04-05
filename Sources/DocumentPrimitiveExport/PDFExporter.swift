@@ -966,8 +966,20 @@ public struct PDFExporter: DocumentExporter {
         page: PreparedPDFPage,
         document: ExportableDocument
     ) {
-        let heights = footnotes.map { estimatedFootnoteHeight(for: $0.content) }
-        let totalHeight = heights.reduce(CGFloat(18), +)
+        let groupedFootnotes = groupedFootnotesForDrawing(footnotes, document: document)
+        let headingHeight: CGFloat = 16
+        let measuredGroups = groupedFootnotes.map { group in
+            (
+                title: group.title,
+                footnotes: group.footnotes,
+                heights: group.footnotes.map { estimatedFootnoteHeight(for: $0.content) }
+            )
+        }
+        let totalHeight = measuredGroups.reduce(CGFloat(18)) { partialResult, group in
+            partialResult
+                + (group.title == nil ? 0 : headingHeight + 4)
+                + group.heights.reduce(0, +)
+        }
         let startY = max(contentRect.maxY - totalHeight, contentRect.minY)
 
         context.saveGState()
@@ -979,44 +991,139 @@ public struct PDFExporter: DocumentExporter {
         context.restoreGState()
 
         var yOffset = startY + 6
-        for (index, footnote) in footnotes.enumerated() {
-            let number = footnoteNumber(
-                page: page,
-                localIndex: index,
-                configuration: document.footnoteConfiguration
-            )
-            let rendered = ExportTextContent(
-                runs: [ExportTextRun(text: "\(number). ")] + resolvedTextContent(footnote.content, page: page, document: document).runs
-            )
-            let height = heights[index]
+        for group in measuredGroups {
+            if let title = group.title {
+                drawText(
+                    attributedString: styledLine(
+                        text: title,
+                        fontSize: 10,
+                        weight: .semibold,
+                        color: CGColor(gray: 0.26, alpha: 1)
+                    ),
+                    in: CGRect(
+                        x: contentRect.minX,
+                        y: yOffset,
+                        width: contentRect.width,
+                        height: headingHeight
+                    ),
+                    context: context
+                )
+                yOffset += headingHeight + 4
+            }
 
-            drawText(
-                attributedString: attributedText(
-                    for: rendered,
-                    baseFontSize: 10,
-                    defaultColor: CGColor(gray: 0.18, alpha: 1)
-                ),
-                in: CGRect(
-                    x: contentRect.minX,
-                    y: yOffset,
-                    width: contentRect.width,
-                    height: height
-                ),
-                context: context
-            )
+            for (index, footnote) in group.footnotes.enumerated() {
+                let marker = footnoteMarker(
+                    footnote,
+                    page: page,
+                    localIndex: footnotes.firstIndex(where: { $0.id == footnote.id }) ?? index,
+                    document: document
+                )
+                let rendered = ExportTextContent(
+                    runs: [ExportTextRun(text: formattedFootnoteMarker(marker, style: document.footnoteConfiguration?.numberingStyle ?? .arabic))] + resolvedTextContent(footnote.content, page: page, document: document).runs
+                )
+                let height = group.heights[index]
 
-            yOffset += height
+                drawText(
+                    attributedString: attributedText(
+                        for: rendered,
+                        baseFontSize: 10,
+                        defaultColor: CGColor(gray: 0.18, alpha: 1)
+                    ),
+                    in: CGRect(
+                        x: contentRect.minX,
+                        y: yOffset,
+                        width: contentRect.width,
+                        height: height
+                    ),
+                    context: context
+                )
+
+                yOffset += height
+            }
         }
     }
 
-    private func footnoteNumber(
+    private func groupedFootnotesForDrawing(
+        _ footnotes: [ExportFootnote],
+        document: ExportableDocument
+    ) -> [(title: String?, footnotes: [ExportFootnote])] {
+        let configuration = document.footnoteConfiguration ?? ExportFootnoteConfiguration()
+        guard configuration.placement == .documentEnd,
+              configuration.restartPerSection,
+              document.sections.count > 1
+        else {
+            return [(nil, footnotes)]
+        }
+
+        let visibleIDs = Set(footnotes.map(\.id))
+        let groups = document.sections.enumerated().compactMap { entry -> (title: String?, footnotes: [ExportFootnote])? in
+            let (index, section) = entry
+            let matches = section.footnotes.filter { visibleIDs.contains($0.id) }
+            guard !matches.isEmpty else { return nil }
+            return (title: "Section \(index + 1) Footnotes", footnotes: matches)
+        }
+
+        return groups.isEmpty ? [(nil, footnotes)] : groups
+    }
+
+    private func footnoteMarker(
+        _ footnote: ExportFootnote,
         page: PreparedPDFPage,
         localIndex: Int,
-        configuration: ExportFootnoteConfiguration?
+        document: ExportableDocument
+    ) -> String {
+        let configuration = document.footnoteConfiguration ?? ExportFootnoteConfiguration()
+        let ordinal = footnoteOrdinal(
+            footnote,
+            page: page,
+            localIndex: localIndex,
+            configuration: configuration,
+            document: document
+        )
+        return configuration.numberingStyle.render(number: ordinal)
+    }
+
+    private func footnoteOrdinal(
+        _ footnote: ExportFootnote,
+        page: PreparedPDFPage,
+        localIndex: Int,
+        configuration: ExportFootnoteConfiguration,
+        document: ExportableDocument
     ) -> Int {
-        guard let configuration else { return localIndex + 1 }
-        guard configuration.restartPerSection else { return localIndex + 1 }
-        return localIndex + 1
+        guard !document.sections.isEmpty else { return localIndex + 1 }
+
+        if configuration.restartPerSection {
+            let sectionFootnotes = footnotesForContainingSection(of: footnote, page: page, document: document)
+            return sectionFootnotes.firstIndex(where: { $0.id == footnote.id }).map { $0 + 1 } ?? (localIndex + 1)
+        }
+
+        let allFootnotes = document.sections.flatMap(\.footnotes)
+        return allFootnotes.firstIndex(where: { $0.id == footnote.id }).map { $0 + 1 } ?? (localIndex + 1)
+    }
+
+    private func footnotesForContainingSection(
+        of footnote: ExportFootnote,
+        page: PreparedPDFPage,
+        document: ExportableDocument
+    ) -> [ExportFootnote] {
+        if let section = document.sections.first(where: { section in
+            section.footnotes.contains(where: { $0.id == footnote.id })
+        }) {
+            return section.footnotes
+        }
+
+        let fallbackIndex = max(min(page.sectionNumber - 1, document.sections.count - 1), 0)
+        return document.sections.indices.contains(fallbackIndex) ? document.sections[fallbackIndex].footnotes : []
+    }
+
+    private func formattedFootnoteMarker(
+        _ marker: String,
+        style: ExportNumberingStyle
+    ) -> String {
+        if style == .symbol {
+            return "\(marker) "
+        }
+        return "\(marker). "
     }
 }
 

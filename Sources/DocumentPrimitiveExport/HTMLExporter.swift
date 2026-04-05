@@ -64,7 +64,8 @@ public struct HTMLExporter: DocumentExporter {
                 section.footnotes,
                 title: "Footnotes",
                 startingAt: configuration.restartPerSection ? 1 : continuousFootnoteNumber,
-                sectionIndex: sectionIndex
+                sectionIndex: sectionIndex,
+                configuration: configuration
                ) {
                 parts.append(footnotes)
             }
@@ -158,22 +159,24 @@ public struct HTMLExporter: DocumentExporter {
         _ footnotes: [ExportFootnote],
         title: String,
         startingAt startNumber: Int,
-        sectionIndex: Int?
+        sectionIndex: Int?,
+        configuration: ExportFootnoteConfiguration
     ) -> String? {
         guard !footnotes.isEmpty else { return nil }
 
         let sectionAttribute = sectionIndex.map { " data-section-index=\"\($0 + 1)\"" } ?? ""
         let items = footnotes.enumerated().map { offset, footnote in
             let number = startNumber + offset
+            let marker = configuration.numberingStyle.render(number: number)
             return """
-            <li value="\(number)" data-anchor-source="\(escape(footnote.anchorSourceIdentifier))">\(render(text: footnote.content))</li>
+            <li data-anchor-source="\(escape(footnote.anchorSourceIdentifier))" data-footnote-marker="\(escape(marker))"><span class="footnote-marker">\(escape(formattedFootnoteMarker(marker, style: configuration.numberingStyle)))</span>\(render(text: footnote.content))</li>
             """
         }.joined(separator: "\n")
 
         return """
         <aside class="document-footnotes"\(sectionAttribute)>
           <h2>\(escape(title))</h2>
-          <ol>
+          <ol style="list-style:none;padding-left:0;margin:0;">
         \(items)
           </ol>
         </aside>
@@ -191,7 +194,8 @@ public struct HTMLExporter: DocumentExporter {
                     section.footnotes,
                     title: "Section \(index + 1) Footnotes",
                     startingAt: 1,
-                    sectionIndex: index
+                    sectionIndex: index,
+                    configuration: configuration
                 )
             }
 
@@ -208,7 +212,8 @@ public struct HTMLExporter: DocumentExporter {
             sections.flatMap(\.footnotes),
             title: "Document Footnotes",
             startingAt: continuousStart,
-            sectionIndex: nil
+            sectionIndex: nil,
+            configuration: configuration
         )
     }
 
@@ -288,6 +293,16 @@ public struct HTMLExporter: DocumentExporter {
             return "image/gif"
         }
         return nil
+    }
+
+    private func formattedFootnoteMarker(
+        _ marker: String,
+        style: ExportNumberingStyle
+    ) -> String {
+        if style == .symbol {
+            return "\(marker) "
+        }
+        return "\(marker). "
     }
 
     private func escape(_ value: String) -> String {

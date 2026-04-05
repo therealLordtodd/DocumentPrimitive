@@ -195,6 +195,7 @@ public struct BlockToExportMapper: Sendable {
 
         return ExportFootnoteConfiguration(
             placement: placement,
+            numberingStyle: exportNumberingStyle(config.numberingStyle),
             restartPerSection: config.restartPerSection
         )
     }
@@ -204,5 +205,18 @@ public struct BlockToExportMapper: Sendable {
             anchorSourceIdentifier: footnote.anchorBlockID.rawValue,
             content: exportTextContent(from: footnote.content)
         )
+    }
+
+    private func exportNumberingStyle(_ style: NumberingStyle) -> ExportNumberingStyle {
+        switch style {
+        case .arabic:
+            .arabic
+        case .roman:
+            .roman
+        case .alpha:
+            .alpha
+        case .symbol:
+            .symbol
+        }
     }
 }

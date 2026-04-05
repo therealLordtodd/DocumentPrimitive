@@ -124,6 +124,88 @@ struct PDFExporterTests {
         #expect(firstPage.contains("Quarter"))
         #expect(firstPage.contains("$120k"))
     }
+
+    @Test func exportsContinuousRomanDocumentEndFootnotes() async throws {
+        let document = Document(
+            title: "PDF Draft",
+            sections: [
+                DocumentSection(
+                    blocks: [
+                        Block(id: "anchor-1", type: .paragraph, content: .text(.plain("Body one")))
+                    ],
+                    footnotes: [
+                        Footnote(anchorBlockID: "anchor-1", content: .plain("First note"))
+                    ]
+                ),
+                DocumentSection(
+                    blocks: [
+                        Block(id: "anchor-2", type: .paragraph, content: .text(.plain("Body two")))
+                    ],
+                    footnotes: [
+                        Footnote(anchorBlockID: "anchor-2", content: .plain("Second note"))
+                    ]
+                ),
+            ],
+            settings: DocumentSettings(
+                footnoteConfig: FootnoteConfig(
+                    placement: .documentEnd,
+                    numberingStyle: .roman,
+                    restartPerSection: false
+                )
+            )
+        )
+
+        let exportable = BlockToExportMapper().map(document: document)
+        let data = try await PDFExporter().export(exportable, options: ExportOptions())
+        let pdf = try #require(PDFDocument(data: data))
+        let lastPageIndex = max(pdf.pageCount - 1, 0)
+        let lastPageText = try #require(pdf.page(at: lastPageIndex)?.string)
+
+        #expect(lastPageText.contains("I. First note"))
+        #expect(lastPageText.contains("II. Second note"))
+    }
+
+    @Test func groupsDocumentEndFootnotesBySectionWhenRestarting() async throws {
+        let document = Document(
+            title: "PDF Draft",
+            sections: [
+                DocumentSection(
+                    blocks: [
+                        Block(id: "anchor-1", type: .paragraph, content: .text(.plain("Body one")))
+                    ],
+                    footnotes: [
+                        Footnote(anchorBlockID: "anchor-1", content: .plain("First note"))
+                    ]
+                ),
+                DocumentSection(
+                    blocks: [
+                        Block(id: "anchor-2", type: .paragraph, content: .text(.plain("Body two")))
+                    ],
+                    footnotes: [
+                        Footnote(anchorBlockID: "anchor-2", content: .plain("Second note"))
+                    ]
+                ),
+            ],
+            settings: DocumentSettings(
+                footnoteConfig: FootnoteConfig(
+                    placement: .documentEnd,
+                    numberingStyle: .arabic,
+                    restartPerSection: true
+                )
+            )
+        )
+
+        let exportable = BlockToExportMapper().map(document: document)
+        let data = try await PDFExporter().export(exportable, options: ExportOptions())
+        let pdf = try #require(PDFDocument(data: data))
+        let lastPageIndex = max(pdf.pageCount - 1, 0)
+        let lastPageText = try #require(pdf.page(at: lastPageIndex)?.string)
+
+        #expect(lastPageText.contains("Section 1 Footnotes"))
+        #expect(lastPageText.contains("Section 2 Footnotes"))
+        #expect(lastPageText.contains("1. First note"))
+        #expect(lastPageText.contains("1. Second note"))
+    }
     #endif
 
     @Test func embedsRealImagesIntoPDF() async throws {

@@ -102,4 +102,34 @@ struct MarkdownExporterTests {
         #expect(markdown.contains("| Quarter | Revenue |"))
         #expect(markdown.contains("| --- | --- |"))
     }
+
+    @Test func exportsRomanDocumentFootnotesToMarkdown() async throws {
+        let document = Document(
+            title: "Draft",
+            sections: [
+                DocumentSection(
+                    blocks: [Block(id: "anchor-1", type: .paragraph, content: .text(.plain("Body")))],
+                    footnotes: [Footnote(anchorBlockID: "anchor-1", content: .plain("First note"))]
+                ),
+                DocumentSection(
+                    blocks: [Block(id: "anchor-2", type: .paragraph, content: .text(.plain("More body")))],
+                    footnotes: [Footnote(anchorBlockID: "anchor-2", content: .plain("Second note"))]
+                ),
+            ],
+            settings: DocumentSettings(
+                footnoteConfig: FootnoteConfig(
+                    placement: .documentEnd,
+                    numberingStyle: .roman,
+                    restartPerSection: false
+                )
+            )
+        )
+
+        let exportable = BlockToExportMapper().map(document: document)
+        let data = try await MarkdownExporter().export(exportable, options: ExportOptions())
+        let markdown = String(decoding: data, as: UTF8.self)
+
+        #expect(markdown.contains("I. First note"))
+        #expect(markdown.contains("II. Second note"))
+    }
 }
