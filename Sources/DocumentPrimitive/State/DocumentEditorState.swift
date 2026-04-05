@@ -92,6 +92,7 @@ public final class DocumentEditorState {
         document.sections[index].blocks = blocks
         layoutEngine.document = document
         layoutEngine.reflow()
+        broadcastSectionMutation(for: sectionID)
     }
 
     fileprivate func headerFooterRuns(
@@ -147,6 +148,7 @@ public final class DocumentEditorState {
         document.sections[index].headerFooter = config
         layoutEngine.document = document
         layoutEngine.reflow()
+        broadcastHeaderFooterMutation(for: sectionID)
     }
 
     private func pageDataSourceKey(for page: ComputedPage) -> String {
@@ -155,6 +157,25 @@ public final class DocumentEditorState {
 
     private func headerFooterDataSourceKey(for sectionID: SectionID, slot: HeaderFooterSlot) -> String {
         "\(sectionID.rawValue)#\(slot.rawValue)"
+    }
+
+    private func broadcastSectionMutation(for sectionID: SectionID) {
+        sectionDataSources[sectionID]?.emitExternalMutation(.batchUpdate)
+
+        for dataSource in pageDataSources.values where dataSource.page.sectionID == sectionID {
+            if let refreshedPage = layoutEngine.pages.first(where: {
+                $0.sectionID == dataSource.page.sectionID && $0.pageNumber == dataSource.page.pageNumber
+            }) {
+                dataSource.page = refreshedPage
+            }
+            dataSource.emitExternalMutation(.batchUpdate)
+        }
+    }
+
+    private func broadcastHeaderFooterMutation(for sectionID: SectionID) {
+        for dataSource in headerFooterDataSources.values where dataSource.sectionID == sectionID {
+            dataSource.emitExternalMutation(.batchUpdate)
+        }
     }
 }
 
@@ -295,6 +316,10 @@ public final class SectionDataSource: RichTextDataSource {
         for observer in observers.values {
             observer(mutation)
         }
+    }
+
+    fileprivate func emitExternalMutation(_ mutation: RichTextMutation) {
+        notify(mutation)
     }
 }
 
@@ -453,6 +478,10 @@ public final class PageScopedDataSource: RichTextDataSource {
             observer(mutation)
         }
     }
+
+    fileprivate func emitExternalMutation(_ mutation: RichTextMutation) {
+        notify(mutation)
+    }
 }
 
 @MainActor
@@ -577,5 +606,9 @@ public final class HeaderFooterDataSource: RichTextDataSource {
         for observer in observers.values {
             observer(mutation)
         }
+    }
+
+    fileprivate func emitExternalMutation(_ mutation: RichTextMutation) {
+        notify(mutation)
     }
 }

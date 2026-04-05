@@ -4,6 +4,7 @@ import SwiftUI
 public struct PageView: View {
     @Bindable private var state: DocumentEditorState
     private let page: ComputedPage
+    private let fieldCodeResolver = FieldCodeResolver()
 
     public init(state: DocumentEditorState, page: ComputedPage) {
         self.state = state
@@ -170,7 +171,8 @@ public struct PageView: View {
     }
 
     private func render(runs: [TextRun]) -> String {
-        runs.map(\.text).joined()
+        let resolvedRuns = fieldCodeResolver.resolve(runs: runs, context: fieldContext)
+        return resolvedRuns.map(\.text).joined()
     }
 
     private func slotPlaceholder(for slot: HeaderFooterSlot) -> String {
@@ -199,5 +201,16 @@ public struct PageView: View {
         }
 
         return min(estimatedHeight, page.template.contentHeight * 0.4)
+    }
+
+    private var fieldContext: FieldResolutionContext {
+        FieldResolutionContext(
+            pageNumber: page.pageNumber,
+            pageCount: state.layoutEngine.pages.count,
+            sectionNumber: (state.document.sectionIndex(page.sectionID) ?? 0) + 1,
+            date: state.document.settings.modifiedAt ?? state.document.settings.createdAt ?? Date(),
+            title: state.document.title,
+            author: state.document.settings.author
+        )
     }
 }
