@@ -122,4 +122,50 @@ public struct GridTableEditor: View {
         return configuration
     }
 }
+
+@MainActor
+public struct GridTableBlockEditor: View {
+    private let block: Block
+    private let editable: Bool
+    private let configuration: TableConfiguration?
+    private let onBlockChange: ((Block) -> Void)?
+
+    private let adapter = GridTableAdapter()
+
+    public init(
+        block: Block,
+        editable: Bool = false,
+        configuration: TableConfiguration? = nil,
+        onBlockChange: ((Block) -> Void)? = nil
+    ) {
+        self.block = block
+        self.editable = editable
+        self.configuration = configuration
+        self.onBlockChange = onBlockChange
+    }
+
+    public var body: some View {
+        if case let .table(table) = block.content {
+            GridTableEditor(
+                table: table,
+                editable: editable,
+                configuration: configuration
+            ) { updatedTable in
+                onBlockChange?(
+                    Block(
+                        id: block.id,
+                        type: .table,
+                        content: .table(updatedTable),
+                        metadata: block.metadata
+                    )
+                )
+            }
+        } else {
+            Text("Grid table editor requires a table block.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+}
 #endif

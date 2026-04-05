@@ -87,6 +87,40 @@ struct GridTableAdapterTests {
     }
 
     @MainActor
+    @Test func updatedTableBlockPreservesIdentityAndMetadata() {
+        let adapter = GridTableAdapter()
+        let originalBlock = Block(
+            id: "table",
+            type: .table,
+            content: .table(
+                TableContent(
+                    rows: [[.plain("Original")]],
+                    columnWidths: [180],
+                    caption: .plain("Inventory")
+                )
+            ),
+            metadata: BlockMetadata(custom: ["pinned": .bool(true)])
+        )
+        let dataSource = ArrayGridDataSource(
+            columns: [GridColumn(id: "A", title: "A", valueType: .text, width: .fixed(180))],
+            rows: [GridRow(id: "1", cells: ["A": .text("Updated")])]
+        )
+
+        let updatedBlock = adapter.updatedTableBlock(from: dataSource, originalBlock: originalBlock)
+
+        guard case let .table(table) = updatedBlock.content else {
+            Issue.record("Expected updated table block content")
+            return
+        }
+
+        #expect(updatedBlock.id == "table")
+        #expect(updatedBlock.metadata == originalBlock.metadata)
+        #expect(table.caption?.plainText == "Inventory")
+        #expect(table.columnWidths == [180])
+        #expect(table.rows.first?.first?.plainText == "Updated")
+    }
+
+    @MainActor
     @Test func gridTableEditorModelPublishesMutationsBackToTableContent() {
         var emittedTables: [TableContent] = []
         let model = GridTableEditorModel(

@@ -85,6 +85,30 @@ public struct GridTableAdapter: Sendable {
         )
     }
 
+    @MainActor
+    public func updatedTableBlock(
+        from dataSource: any GridDataSource,
+        originalBlock: Block
+    ) -> Block {
+        let originalTable: TableContent? = {
+            guard case let .table(table) = originalBlock.content else { return nil }
+            return table
+        }()
+
+        return Block(
+            id: originalBlock.id,
+            type: .table,
+            content: .table(
+                tableContent(
+                    from: dataSource,
+                    caption: originalTable?.caption,
+                    columnWidths: originalTable?.columnWidths
+                )
+            ),
+            metadata: originalBlock.metadata
+        )
+    }
+
     private func textContent(from value: CellValue) -> TextContent {
         .plain(plainText(from: value))
     }
