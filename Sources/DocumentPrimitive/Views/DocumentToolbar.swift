@@ -21,9 +21,27 @@ public struct DocumentToolbar: View {
 
             Spacer()
 
-            Text("Page \(state.currentPage)")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            HStack(spacing: 8) {
+                Button {
+                    state.goToPreviousPage()
+                } label: {
+                    Image(systemName: "chevron.left")
+                }
+                .buttonStyle(.borderless)
+                .disabled(!state.canGoToPreviousPage)
+
+                Text("Page \(state.currentPage)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Button {
+                    state.goToNextPage()
+                } label: {
+                    Image(systemName: "chevron.right")
+                }
+                .buttonStyle(.borderless)
+                .disabled(!state.canGoToNextPage)
+            }
         }
         .padding(.horizontal)
         .padding(.vertical, 8)

@@ -181,4 +181,79 @@ struct DocumentModelTests {
         #expect(state.document.section("section")?.headerFooter?.firstFooter?.center.first?.text == "First Footer")
         #expect(state.document.section("section")?.headerFooter?.header?.center.first?.text == "Default Header")
     }
+
+    @MainActor
+    @Test func selectionOffsetTracksCurrentPageAcrossSplitBlocks() {
+        let longText = String(repeating: "Split me across pages ", count: 2500)
+        let document = Document(
+            title: "Paged",
+            sections: [
+                DocumentSection(
+                    id: "section",
+                    blocks: [
+                        Block(id: "body", type: .paragraph, content: .text(.plain(longText))),
+                    ]
+                ),
+            ]
+        )
+
+        let state = DocumentEditorState(document: document)
+        let lastPageNumber = try! #require(state.layoutEngine.pages.last?.pageNumber)
+
+        state.richTextState.selection = .caret("body", offset: 0)
+        state.richTextState.focusedBlockID = "body"
+        state.syncCurrentLocationToSelection()
+        #expect(state.currentPage == 1)
+        #expect(state.currentSection == "section")
+
+        state.richTextState.selection = .caret("body", offset: longText.count)
+        state.syncCurrentLocationToSelection()
+        #expect(state.currentPage == lastPageNumber)
+    }
+
+    @MainActor
+    @Test func pageNavigationMovesThroughLaidOutPagesInOrder() {
+        let longText = String(repeating: "Body copy ", count: 2000)
+        let document = Document(
+            title: "Navigation",
+            sections: [
+                DocumentSection(
+                    id: "one",
+                    blocks: [Block(id: "a", type: .paragraph, content: .text(.plain(longText)))]
+                ),
+                DocumentSection(
+                    id: "two",
+                    blocks: [Block(id: "b", type: .paragraph, content: .text(.plain("Tail")))],
+                    startPageNumber: 10
+                ),
+            ]
+        )
+
+        let state = DocumentEditorState(document: document)
+        guard state.layoutEngine.pages.count > 2 else {
+            Issue.record("Expected multiple laid out pages to test navigation")
+            return
+        }
+
+        let firstPage = try! #require(state.layoutEngine.pages.first)
+        let secondPage = try! #require(state.layoutEngine.pages.dropFirst().first)
+        let lastPage = try! #require(state.layoutEngine.pages.last)
+
+        state.currentPage = firstPage.pageNumber
+        state.currentSection = firstPage.sectionID
+
+        state.goToNextPage()
+        #expect(state.currentPage == secondPage.pageNumber)
+        #expect(state.currentSection == secondPage.sectionID)
+
+        while state.canGoToNextPage {
+            state.goToNextPage()
+        }
+
+        #expect(state.currentPage == lastPage.pageNumber)
+        #expect(state.currentSection == lastPage.sectionID)
+
+        state.goToPreviousPage()
+        #expect(state.currentPage != lastPage.pageNumber || state.currentSection != lastPage.sectionID)
+    }
 }

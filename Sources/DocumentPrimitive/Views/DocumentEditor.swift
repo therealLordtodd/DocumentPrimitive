@@ -20,6 +20,13 @@ public struct DocumentEditor: View {
         }
         .onAppear {
             state.layoutEngine.reflow()
+            state.syncCurrentLocationToSelection()
+        }
+        .onChange(of: state.richTextState.selection) { _, _ in
+            state.syncCurrentLocationToSelection()
+        }
+        .onChange(of: state.richTextState.focusedBlockID) { _, _ in
+            state.syncCurrentLocationToSelection()
         }
     }
 

@@ -13,17 +13,18 @@ public struct MarkdownExporter: DocumentExporter {
 
     public func export(_ document: ExportableDocument, options: ExportOptions) async throws -> Data {
         _ = options
-        let markdown = renderDocument(document)
+        let markdown = await renderDocument(document)
         return Data(markdown.utf8)
     }
 
-    private func renderDocument(_ document: ExportableDocument) -> String {
+    private func renderDocument(_ document: ExportableDocument) async -> String {
         guard !document.sections.isEmpty else {
             return document.blocks.map(render(block:)).joined(separator: "\n\n")
         }
 
-        let sectionStartPages = sectionStartPages(for: document.sections)
-        let totalPageCount = max(sectionStartPages.last ?? 1, 1)
+        let metrics = await ExportPageMetricsResolver().resolve(document: document)
+        let sectionStartPages = metrics.sectionStartPages
+        let totalPageCount = metrics.totalPageCount
         let configuration = document.footnoteConfiguration ?? ExportFootnoteConfiguration()
         var renderedSections: [String] = []
         var continuousFootnoteNumber = 1
@@ -347,19 +348,6 @@ public struct MarkdownExporter: DocumentExporter {
         }
 
         return startPage
-    }
-
-    private func sectionStartPages(for sections: [ExportSection]) -> [Int] {
-        var pages: [Int] = []
-        var nextPage = 1
-
-        for section in sections {
-            let startPage = max(section.startPageNumber ?? nextPage, 1)
-            pages.append(startPage)
-            nextPage = startPage + 1
-        }
-
-        return pages
     }
 
     private func render(run: ExportTextRun) -> String {

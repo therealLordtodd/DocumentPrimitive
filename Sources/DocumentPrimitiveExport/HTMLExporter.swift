@@ -13,7 +13,7 @@ public struct HTMLExporter: DocumentExporter {
 
     public func export(_ document: ExportableDocument, options: ExportOptions) async throws -> Data {
         _ = options
-        let body = renderBody(for: document)
+        let body = await renderBody(for: document)
         let html = """
         <!doctype html>
         <html>
@@ -29,13 +29,14 @@ public struct HTMLExporter: DocumentExporter {
         return Data(html.utf8)
     }
 
-    private func renderBody(for document: ExportableDocument) -> String {
+    private func renderBody(for document: ExportableDocument) async -> String {
         guard !document.sections.isEmpty else {
             return document.blocks.map(render(block:)).joined(separator: "\n")
         }
 
-        let sectionStartPages = sectionStartPages(for: document.sections)
-        let totalPageCount = max(sectionStartPages.last ?? 1, 1)
+        let metrics = await ExportPageMetricsResolver().resolve(document: document)
+        let sectionStartPages = metrics.sectionStartPages
+        let totalPageCount = metrics.totalPageCount
         let configuration = document.footnoteConfiguration ?? ExportFootnoteConfiguration()
         var body: [String] = []
         var continuousFootnoteNumber = 1
@@ -369,19 +370,6 @@ public struct HTMLExporter: DocumentExporter {
         }
 
         return startPage
-    }
-
-    private func sectionStartPages(for sections: [ExportSection]) -> [Int] {
-        var pages: [Int] = []
-        var nextPage = 1
-
-        for section in sections {
-            let startPage = max(section.startPageNumber ?? nextPage, 1)
-            pages.append(startPage)
-            nextPage = startPage + 1
-        }
-
-        return pages
     }
 
     private func render(run: ExportTextRun) -> String {

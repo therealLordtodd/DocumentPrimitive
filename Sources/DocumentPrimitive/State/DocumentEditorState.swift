@@ -12,6 +12,8 @@ public final class DocumentEditorState {
             if currentSection == nil {
                 currentSection = document.sections.first?.id
             }
+            syncCurrentLocationToSelection()
+            ensureCurrentPageExists()
         }
     }
 
@@ -45,6 +47,18 @@ public final class DocumentEditorState {
         self.currentSection = currentSection ?? document.sections.first?.id
         self.layoutEngine = PageLayoutEngine(document: document)
         self.layoutEngine.reflow()
+        syncCurrentLocationToSelection()
+        ensureCurrentPageExists()
+    }
+
+    public var canGoToPreviousPage: Bool {
+        guard let index = currentPageIndex() else { return false }
+        return index > 0
+    }
+
+    public var canGoToNextPage: Bool {
+        guard let index = currentPageIndex() else { return false }
+        return index < layoutEngine.pages.count - 1
     }
 
     public func dataSource(for sectionID: SectionID) -> SectionDataSource {
@@ -93,6 +107,8 @@ public final class DocumentEditorState {
         layoutEngine.document = document
         layoutEngine.reflow()
         broadcastSectionMutation(for: sectionID)
+        syncCurrentLocationToSelection()
+        ensureCurrentPageExists()
     }
 
     fileprivate func headerFooterRuns(
@@ -204,6 +220,29 @@ public final class DocumentEditorState {
         layoutEngine.document = document
         layoutEngine.reflow()
         broadcastHeaderFooterMutation(for: sectionID)
+        syncCurrentLocationToSelection()
+        ensureCurrentPageExists()
+    }
+
+    public func goToPreviousPage() {
+        guard let index = currentPageIndex(), index > 0 else { return }
+        select(page: layoutEngine.pages[index - 1])
+    }
+
+    public func goToNextPage() {
+        guard let index = currentPageIndex(), index + 1 < layoutEngine.pages.count else { return }
+        select(page: layoutEngine.pages[index + 1])
+    }
+
+    func syncCurrentLocationToSelection() {
+        guard let position = selectedPosition(),
+              let location = pageLocation(for: position)
+        else {
+            return
+        }
+
+        currentSection = location.sectionID
+        currentPage = location.pageNumber
     }
 
     private func pageDataSourceKey(for page: ComputedPage) -> String {
@@ -231,6 +270,145 @@ public final class DocumentEditorState {
         for dataSource in headerFooterDataSources.values where dataSource.sectionID == sectionID {
             dataSource.emitExternalMutation(.batchUpdate)
         }
+    }
+
+    func pageScrollKey(for page: ComputedPage) -> String {
+        pageDataSourceKey(for: page)
+    }
+
+    var currentPageScrollKey: String? {
+        resolvedCurrentPage().map(pageScrollKey(for:))
+    }
+
+    private func selectedPosition() -> TextPosition? {
+        switch richTextState.selection {
+        case let .caret(blockID, offset):
+            return TextPosition(blockID: blockID, offset: offset)
+        case let .range(start, _):
+            return start
+        case let .blockSelection(blockIDs):
+            if let focusedBlockID = richTextState.focusedBlockID {
+                return TextPosition(blockID: focusedBlockID, offset: 0)
+            }
+            guard let firstBlockID = blockIDs.sorted(by: { $0.rawValue < $1.rawValue }).first else {
+                return nil
+            }
+            return TextPosition(blockID: firstBlockID, offset: 0)
+        }
+    }
+
+    private func pageLocation(for position: TextPosition) -> (sectionID: SectionID, pageNumber: Int)? {
+        guard let section = document.sections.first(where: { section in
+            section.blocks.contains(where: { $0.id == position.blockID })
+        }) else {
+            return nil
+        }
+
+        let candidatePlacements = layoutEngine.pages.flatMap { page in
+            page.blockPlacements
+                .filter { $0.blockID == position.blockID }
+                .map { placement in
+                    (page: page, placement: placement)
+                }
+        }
+
+        guard let firstCandidate = candidatePlacements.first else {
+            guard let pageNumber = layoutEngine.pageNumber(for: position.blockID) else { return nil }
+            return (section.id, pageNumber)
+        }
+
+        guard let block = section.blocks.first(where: { $0.id == position.blockID }) else {
+            return (firstCandidate.page.sectionID, firstCandidate.page.pageNumber)
+        }
+
+        let targetHeight = selectionHeight(for: position.offset, in: block, itemHeight: firstCandidate.placement.itemHeight)
+        if let exactCandidate = candidatePlacements.first(where: { candidate in
+            contains(selectionHeight: targetHeight, in: candidate.placement)
+        }) {
+            return (exactCandidate.page.sectionID, exactCandidate.page.pageNumber)
+        }
+
+        if targetHeight <= (candidatePlacements.first?.placement.partialRange?.lowerBound ?? 0) {
+            return (firstCandidate.page.sectionID, firstCandidate.page.pageNumber)
+        }
+
+        if let lastCandidate = candidatePlacements.last {
+            return (lastCandidate.page.sectionID, lastCandidate.page.pageNumber)
+        }
+
+        return (firstCandidate.page.sectionID, firstCandidate.page.pageNumber)
+    }
+
+    private func selectionHeight(for offset: Int, in block: Block, itemHeight: CGFloat) -> CGFloat {
+        let totalCharacters = max(editableCharacterCount(for: block), 1)
+        let clampedOffset = min(max(offset, 0), totalCharacters)
+        let ratio = CGFloat(clampedOffset) / CGFloat(totalCharacters)
+        return min(max(itemHeight * ratio, 0), itemHeight)
+    }
+
+    private func contains(selectionHeight: CGFloat, in placement: BlockFragmentPlacement) -> Bool {
+        guard let partialRange = placement.partialRange else { return true }
+
+        if selectionHeight >= placement.itemHeight {
+            return partialRange.upperBound >= placement.itemHeight
+        }
+
+        return selectionHeight >= partialRange.lowerBound && selectionHeight < partialRange.upperBound
+    }
+
+    private func editableCharacterCount(for block: Block) -> Int {
+        switch block.content {
+        case let .text(content),
+             let .heading(content, _),
+             let .blockQuote(content),
+             let .list(content, _, _):
+            return max(content.plainText.count, 1)
+        case let .codeBlock(code, _):
+            return max(code.count, 1)
+        case let .table(table):
+            if let caption = table.caption?.plainText, !caption.isEmpty {
+                return max(caption.count, 1)
+            }
+            let flattened = table.rows.flatMap { $0 }.map(\.plainText).joined(separator: " ")
+            return max(flattened.count, 1)
+        case let .image(image):
+            return max((image.altText ?? "[Image]").count, 1)
+        case .divider:
+            return 1
+        case let .embed(embed):
+            return max((embed.payload ?? "[\(embed.kind)]").count, 1)
+        }
+    }
+
+    private func currentPageIndex() -> Int? {
+        guard let page = resolvedCurrentPage() else { return nil }
+        return layoutEngine.pages.firstIndex(where: { $0.id == page.id })
+    }
+
+    private func resolvedCurrentPage() -> ComputedPage? {
+        if let currentSection {
+            if let exact = layoutEngine.pages.first(where: {
+                $0.sectionID == currentSection && $0.pageNumber == currentPage
+            }) {
+                return exact
+            }
+
+            if let sameSection = layoutEngine.pages.first(where: { $0.sectionID == currentSection }) {
+                return sameSection
+            }
+        }
+
+        return layoutEngine.pages.first(where: { $0.pageNumber == currentPage }) ?? layoutEngine.pages.first
+    }
+
+    private func select(page: ComputedPage) {
+        currentSection = page.sectionID
+        currentPage = page.pageNumber
+    }
+
+    private func ensureCurrentPageExists() {
+        guard resolvedCurrentPage() == nil, let firstPage = layoutEngine.pages.first else { return }
+        select(page: firstPage)
     }
 }
 

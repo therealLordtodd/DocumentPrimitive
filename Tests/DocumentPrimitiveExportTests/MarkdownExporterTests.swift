@@ -220,4 +220,36 @@ struct MarkdownExporterTests {
         #expect(markdown.contains("_Odd Header:_ Odd 11"))
         #expect(markdown.contains("_Even Header:_ Even 12"))
     }
+
+    @Test func laterSectionsUsePaginatedStartPagesInMarkdown() async throws {
+        let longText = String(repeating: "Long body copy ", count: 2500)
+        let document = Document(
+            title: "Draft",
+            sections: [
+                DocumentSection(
+                    blocks: [
+                        Block(type: .paragraph, content: .text(.plain(longText))),
+                    ]
+                ),
+                DocumentSection(
+                    blocks: [
+                        Block(type: .paragraph, content: .text(.plain("Tail section"))),
+                    ],
+                    headerFooter: HeaderFooterConfig(
+                        header: HeaderFooter(center: [TextRun(text: "Hdr {PAGE}/{NUMPAGES}")])
+                    )
+                ),
+            ]
+        )
+
+        let exportable = BlockToExportMapper().map(document: document)
+        let metrics = await ExportPageMetricsResolver().resolve(document: exportable)
+        let data = try await MarkdownExporter().export(exportable, options: ExportOptions())
+        let markdown = String(decoding: data, as: UTF8.self)
+
+        #expect(metrics.sectionStartPages.count == 2)
+        #expect(metrics.sectionStartPages[1] > 2)
+        #expect(markdown.contains("_Header:_ Hdr \(metrics.sectionStartPages[1])/\(metrics.totalPageCount)"))
+        #expect(markdown.contains("<!-- section 2 start-page: \(metrics.sectionStartPages[1]) columns: 1 -->"))
+    }
 }
