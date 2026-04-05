@@ -156,5 +156,46 @@ struct GridTableAdapterTests {
         #expect(model.table.caption?.plainText == "Rebuilt")
         #expect(model.dataSource.row(at: 0).cells["C"] == .text("C"))
     }
+
+    @MainActor
+    @Test func documentStateAcceptsUpdatedTableBlockFromGridAdapter() {
+        let originalBlock = Block(
+            id: "table",
+            type: .table,
+            content: .table(
+                TableContent(
+                    rows: [[.plain("Original")]],
+                    columnWidths: [180],
+                    caption: .plain("Inventory")
+                )
+            ),
+            metadata: BlockMetadata(custom: ["pinned": .bool(true)])
+        )
+        let editorState = DocumentEditorState(
+            document: Document(
+                title: "Document",
+                sections: [
+                    DocumentSection(id: "section", blocks: [originalBlock]),
+                ]
+            )
+        )
+        let adapter = GridTableAdapter()
+        let dataSource = ArrayGridDataSource(
+            columns: [GridColumn(id: "A", title: "A", valueType: .text, width: .fixed(180))],
+            rows: [GridRow(id: "1", cells: ["A": .text("Updated")])]
+        )
+
+        let updatedBlock = adapter.updatedTableBlock(from: dataSource, originalBlock: originalBlock)
+        editorState.replaceBlock(updatedBlock, in: "section")
+
+        guard case let .table(table) = editorState.document.section("section")?.blocks.first?.content else {
+            Issue.record("Expected updated table block in document state")
+            return
+        }
+
+        #expect(table.rows.first?.first?.plainText == "Updated")
+        #expect(table.caption?.plainText == "Inventory")
+        #expect(editorState.document.section("section")?.blocks.first?.metadata == originalBlock.metadata)
+    }
 }
 #endif

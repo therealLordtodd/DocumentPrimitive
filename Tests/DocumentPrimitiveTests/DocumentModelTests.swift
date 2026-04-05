@@ -321,4 +321,36 @@ struct DocumentModelTests {
         state.goToPreviousPage()
         #expect(state.currentPage != lastPage.pageNumber || state.currentSection != lastPage.sectionID)
     }
+
+    @MainActor
+    @Test func replaceBlockUpdatesDocumentAndLookupReflectsChange() {
+        let originalBlock = Block(
+            id: "table",
+            type: .table,
+            content: .table(TableContent(rows: [[.plain("Original")]], caption: .plain("Inventory"))),
+            metadata: BlockMetadata(custom: ["pinned": .bool(true)])
+        )
+        let updatedBlock = Block(
+            id: "table",
+            type: .table,
+            content: .table(TableContent(rows: [[.plain("Updated")]], caption: .plain("Inventory"))),
+            metadata: BlockMetadata(custom: ["pinned": .bool(true)])
+        )
+        let document = Document(
+            title: "Tables",
+            sections: [
+                DocumentSection(
+                    id: "section",
+                    blocks: [originalBlock]
+                ),
+            ]
+        )
+
+        let state = DocumentEditorState(document: document)
+        state.replaceBlock(updatedBlock, in: "section")
+
+        let resolvedBlock = try! #require(state.block(in: "section", id: "table"))
+        #expect(resolvedBlock == updatedBlock)
+        #expect(state.document.section("section")?.blocks.first == updatedBlock)
+    }
 }

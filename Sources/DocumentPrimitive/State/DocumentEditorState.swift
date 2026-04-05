@@ -143,6 +143,18 @@ public final class DocumentEditorState {
         return state
     }
 
+    public func block(in sectionID: SectionID, id blockID: BlockID) -> Block? {
+        blocks(for: sectionID).first { $0.id == blockID }
+    }
+
+    public func replaceBlock(_ block: Block, in sectionID: SectionID) {
+        guard let sectionIndex = document.sectionIndex(sectionID) else { return }
+        var updated = document.sections[sectionIndex].blocks
+        guard let blockIndex = updated.firstIndex(where: { $0.id == block.id }) else { return }
+        updated[blockIndex] = block
+        updateSectionBlocks(updated, for: sectionID)
+    }
+
     fileprivate func blocks(for sectionID: SectionID) -> [Block] {
         document.section(sectionID)?.blocks ?? []
     }

@@ -1,4 +1,5 @@
 #if canImport(GridPrimitive) && canImport(GridPrimitiveTable)
+import DocumentPrimitive
 import Foundation
 import GridPrimitive
 import GridPrimitiveTable
@@ -162,6 +163,47 @@ public struct GridTableBlockEditor: View {
             }
         } else {
             Text("Grid table editor requires a table block.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+}
+
+@MainActor
+public struct DocumentTableBlockEditor: View {
+    @Bindable private var editorState: DocumentEditorState
+
+    private let sectionID: SectionID
+    private let blockID: BlockID
+    private let editable: Bool
+    private let configuration: TableConfiguration?
+
+    public init(
+        editorState: DocumentEditorState,
+        sectionID: SectionID,
+        blockID: BlockID,
+        editable: Bool = false,
+        configuration: TableConfiguration? = nil
+    ) {
+        self.editorState = editorState
+        self.sectionID = sectionID
+        self.blockID = blockID
+        self.editable = editable
+        self.configuration = configuration
+    }
+
+    public var body: some View {
+        if let block = editorState.block(in: sectionID, id: blockID) {
+            GridTableBlockEditor(
+                block: block,
+                editable: editable,
+                configuration: configuration
+            ) { updatedBlock in
+                editorState.replaceBlock(updatedBlock, in: sectionID)
+            }
+        } else {
+            Text("Table block not found.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
