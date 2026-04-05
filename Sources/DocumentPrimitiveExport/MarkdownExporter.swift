@@ -91,12 +91,25 @@ public struct MarkdownExporter: DocumentExporter {
             let prefix = ordered ? "1. " : "- "
             let indent = String(repeating: "  ", count: indentLevel)
             return "\(indent)\(prefix)\(render(text: content))"
-        case let .table(rows):
-            let body = rows.map { row in
-                "| " + row.map { render(text: $0) }.joined(separator: " | ") + " |"
+        case let .table(rows, _, caption):
+            var lines: [String] = []
+            if let caption, !caption.plainText.isEmpty {
+                lines.append("_\(render(text: caption))_")
             }
-            return body.joined(separator: "\n")
-        case let .image(_, url, altText):
+
+            guard let firstRow = rows.first else {
+                return lines.joined(separator: "\n\n")
+            }
+
+            lines.append("| " + firstRow.map { render(text: $0) }.joined(separator: " | ") + " |")
+            lines.append("| " + firstRow.map { _ in "---" }.joined(separator: " | ") + " |")
+            lines.append(
+                contentsOf: rows.dropFirst().map { row in
+                    "| " + row.map { render(text: $0) }.joined(separator: " | ") + " |"
+                }
+            )
+            return lines.joined(separator: "\n")
+        case let .image(_, url, altText, _):
             return "![\(altText ?? "")](\(url?.absoluteString ?? ""))"
         case .divider:
             return "---"

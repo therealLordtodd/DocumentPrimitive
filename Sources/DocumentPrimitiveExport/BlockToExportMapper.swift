@@ -101,9 +101,13 @@ public struct BlockToExportMapper: Sendable {
         case let .list(textContent, style, indentLevel):
             .list(exportTextContent(from: textContent), ordered: style == .numbered, indentLevel: indentLevel)
         case let .table(table):
-            .table(rows: table.rows.map { row in row.map(exportTextContent(from:)) })
+            .table(
+                rows: table.rows.map { row in row.map(exportTextContent(from:)) },
+                columnWidths: table.columnWidths,
+                caption: table.caption.map(exportTextContent(from:))
+            )
         case let .image(image):
-            .image(data: image.data, url: image.url, altText: image.altText)
+            .image(data: image.data, url: image.url, altText: image.altText, size: image.size)
         case .divider:
             .divider
         case let .embed(embed):

@@ -2,6 +2,7 @@ import CoreGraphics
 import CoreText
 import ExportKit
 import Foundation
+import ImageIO
 import PaginationPrimitive
 import SwiftUI
 import UniformTypeIdentifiers
@@ -447,24 +448,24 @@ public struct PDFExporter: DocumentExporter {
             context.strokePath()
             context.restoreGState()
 
-        case .image:
-            context.saveGState()
-            context.setStrokeColor(CGColor(gray: 0.75, alpha: 1))
-            context.setFillColor(CGColor(gray: 0.96, alpha: 1))
-            context.fill(targetRect)
-            context.stroke(targetRect)
-            drawText(
-                attributedString: styledLine(
-                    text: descriptor.block.content.altTextOrPlaceholder,
-                    fontSize: 12,
-                    weight: .regular,
-                    color: CGColor(gray: 0.35, alpha: 1)
-                ),
-                in: targetRect.insetBy(dx: 12, dy: 12),
-                context: context,
-                alignment: .center
+        case let .image(data, url, altText, size):
+            drawImage(
+                data: data,
+                url: url,
+                altText: altText,
+                declaredSize: size,
+                in: targetRect,
+                context: context
             )
-            context.restoreGState()
+
+        case let .table(rows, columnWidths, caption):
+            drawTable(
+                rows: rows,
+                columnWidths: columnWidths,
+                caption: caption,
+                in: targetRect,
+                context: context
+            )
 
         default:
             guard let attributedText = descriptor.attributedText else { return }
@@ -522,8 +523,21 @@ public struct PDFExporter: DocumentExporter {
         switch block.content {
         case .divider:
             measuredHeight = 24
-        case .image:
-            measuredHeight = 180
+        case let .image(data, url, _, size):
+            measuredHeight = measuredImageHeight(
+                data: data,
+                url: url,
+                declaredSize: size,
+                availableWidth: availableWidth,
+                maximumHeight: max(template.contentHeight * 0.6, 120)
+            )
+        case let .table(rows, columnWidths, caption):
+            measuredHeight = tableLayout(
+                rows: rows,
+                columnWidths: columnWidths,
+                caption: caption,
+                availableWidth: availableWidth
+            ).totalHeight
         default:
             let textHeight = attributedText.map { measure($0, width: availableWidth) } ?? 18
             measuredHeight = max(textHeight + 16, minimumHeight(for: block))
@@ -563,9 +577,9 @@ public struct PDFExporter: DocumentExporter {
 
     private func canBreakInternally(_ block: ExportBlock) -> Bool {
         switch block.content {
-        case .text, .heading, .blockQuote, .codeBlock, .list, .table:
+        case .text, .heading, .blockQuote, .codeBlock, .list:
             true
-        case .image, .divider:
+        case .table, .image, .divider:
             false
         }
     }
@@ -603,14 +617,228 @@ public struct PDFExporter: DocumentExporter {
                 runs: [ExportTextRun(text: indent + prefix)] + content.runs
             )
             return attributedText(for: rendered, baseFontSize: 12)
-        case let .table(rows):
-            let lines = rows.map { row in
-                row.map(\.plainText).joined(separator: " | ")
-            }.joined(separator: "\n")
-            return styledLine(text: lines, fontSize: 11, weight: .monospaced, color: CGColor(gray: 0.18, alpha: 1))
+        case .table:
+            return nil
         case .image, .divider:
             return nil
         }
+    }
+
+    private func drawImage(
+        data: Data?,
+        url: URL?,
+        altText: String?,
+        declaredSize: CGSize?,
+        in rect: CGRect,
+        context: CGContext
+    ) {
+        let insetRect = rect.insetBy(dx: 0, dy: 4)
+
+        if let image = loadCGImage(data: data, url: url) {
+            let fittedRect = aspectFitRect(
+                for: CGSize(width: image.width, height: image.height),
+                in: insetRect
+            )
+            context.saveGState()
+            context.interpolationQuality = .high
+            context.draw(image, in: fittedRect)
+            context.restoreGState()
+            return
+        }
+
+        let fallbackRect = aspectFitRect(
+            for: declaredSize ?? CGSize(width: insetRect.width, height: insetRect.height),
+            in: insetRect
+        )
+        context.saveGState()
+        context.setStrokeColor(CGColor(gray: 0.75, alpha: 1))
+        context.setFillColor(CGColor(gray: 0.96, alpha: 1))
+        context.fill(fallbackRect)
+        context.stroke(fallbackRect)
+        drawText(
+            attributedString: styledLine(
+                text: altText ?? "Image",
+                fontSize: 12,
+                weight: .regular,
+                color: CGColor(gray: 0.35, alpha: 1)
+            ),
+            in: fallbackRect.insetBy(dx: 12, dy: 12),
+            context: context,
+            alignment: .center
+        )
+        context.restoreGState()
+    }
+
+    private func drawTable(
+        rows: [[ExportTextContent]],
+        columnWidths: [CGFloat]?,
+        caption: ExportTextContent?,
+        in rect: CGRect,
+        context: CGContext
+    ) {
+        let layout = tableLayout(
+            rows: rows,
+            columnWidths: columnWidths,
+            caption: caption,
+            availableWidth: rect.width
+        )
+        let cellPadding: CGFloat = 6
+        var yOffset = rect.minY
+
+        if let caption, layout.captionHeight > 0 {
+            drawText(
+                attributedString: attributedText(for: caption, baseFontSize: 11, forceBold: true),
+                in: CGRect(x: rect.minX, y: yOffset, width: rect.width, height: layout.captionHeight),
+                context: context
+            )
+            yOffset += layout.captionHeight
+        }
+
+        for rowIndex in rows.indices {
+            let rowHeight = layout.rowHeights[rowIndex]
+            var xOffset = rect.minX
+
+            for columnIndex in layout.columnWidths.indices {
+                let columnWidth = layout.columnWidths[columnIndex]
+                let cellRect = CGRect(x: xOffset, y: yOffset, width: columnWidth, height: rowHeight)
+                let content = columnIndex < rows[rowIndex].count ? rows[rowIndex][columnIndex] : .plain("")
+
+                context.saveGState()
+                if rowIndex == 0 {
+                    context.setFillColor(CGColor(gray: 0.95, alpha: 1))
+                    context.fill(cellRect)
+                }
+                context.setStrokeColor(CGColor(gray: 0.72, alpha: 1))
+                context.setLineWidth(0.8)
+                context.stroke(cellRect)
+                context.restoreGState()
+
+                context.saveGState()
+                context.clip(to: cellRect.insetBy(dx: 0.5, dy: 0.5))
+                drawText(
+                    attributedString: attributedText(
+                        for: content,
+                        baseFontSize: 11,
+                        forceBold: rowIndex == 0
+                    ),
+                    in: cellRect.insetBy(dx: cellPadding, dy: cellPadding),
+                    context: context
+                )
+                context.restoreGState()
+                xOffset += columnWidth
+            }
+
+            yOffset += rowHeight
+        }
+    }
+
+    private func tableLayout(
+        rows: [[ExportTextContent]],
+        columnWidths: [CGFloat]?,
+        caption: ExportTextContent?,
+        availableWidth: CGFloat
+    ) -> PDFTableLayout {
+        let columnCount = max(rows.map(\.count).max() ?? 0, 1)
+        let normalizedColumnWidths = normalizedColumnWidths(
+            requestedWidths: columnWidths,
+            columnCount: columnCount,
+            availableWidth: availableWidth
+        )
+        let cellPadding: CGFloat = 6
+        let rowHeights: [CGFloat] = rows.map { row in
+            let tallestCell: CGFloat = normalizedColumnWidths.enumerated().map { index, width in
+                let content = index < row.count ? row[index] : .plain("")
+                let attributed = attributedText(for: content, baseFontSize: 11)
+                return measure(attributed, width: max(width - (cellPadding * 2), 24))
+            }.max() ?? 0
+            return max(tallestCell + (cellPadding * 2), CGFloat(24))
+        }
+        let captionHeight: CGFloat = caption.map {
+            measure(
+                attributedText(for: $0, baseFontSize: 11, forceBold: true),
+                width: availableWidth
+            ) + 10
+        } ?? 0
+
+        return PDFTableLayout(
+            columnWidths: normalizedColumnWidths,
+            rowHeights: rowHeights,
+            captionHeight: captionHeight
+        )
+    }
+
+    private func normalizedColumnWidths(
+        requestedWidths: [CGFloat]?,
+        columnCount: Int,
+        availableWidth: CGFloat
+    ) -> [CGFloat] {
+        guard columnCount > 0 else { return [] }
+
+        let sourceWidths = requestedWidths?.prefix(columnCount).map { max($0, 1) }
+        let totalRequested = sourceWidths?.reduce(0, +) ?? 0
+
+        if let sourceWidths, sourceWidths.count == columnCount, totalRequested > 0 {
+            return sourceWidths.map { ($0 / totalRequested) * availableWidth }
+        }
+
+        return Array(repeating: availableWidth / CGFloat(columnCount), count: columnCount)
+    }
+
+    private func measuredImageHeight(
+        data: Data?,
+        url: URL?,
+        declaredSize: CGSize?,
+        availableWidth: CGFloat,
+        maximumHeight: CGFloat
+    ) -> CGFloat {
+        let imageSize = resolvedImageSize(data: data, url: url, declaredSize: declaredSize)
+            ?? CGSize(width: availableWidth, height: availableWidth * 0.72)
+
+        guard imageSize.width > 0, imageSize.height > 0 else { return 180 }
+        let scale = min(availableWidth / imageSize.width, maximumHeight / imageSize.height)
+        return max((imageSize.height * max(scale, 0.01)) + 8, 72)
+    }
+
+    private func resolvedImageSize(
+        data: Data?,
+        url: URL?,
+        declaredSize: CGSize?
+    ) -> CGSize? {
+        if let declaredSize, declaredSize.width > 0, declaredSize.height > 0 {
+            return declaredSize
+        }
+
+        guard let image = loadCGImage(data: data, url: url) else { return nil }
+        return CGSize(width: image.width, height: image.height)
+    }
+
+    private func loadCGImage(data: Data?, url: URL?) -> CGImage? {
+        if let data,
+           let source = CGImageSourceCreateWithData(data as CFData, nil) {
+            return CGImageSourceCreateImageAtIndex(source, 0, nil)
+        }
+
+        if let url, url.isFileURL,
+           let source = CGImageSourceCreateWithURL(url as CFURL, nil) {
+            return CGImageSourceCreateImageAtIndex(source, 0, nil)
+        }
+
+        return nil
+    }
+
+    private func aspectFitRect(for sourceSize: CGSize, in bounds: CGRect) -> CGRect {
+        guard sourceSize.width > 0, sourceSize.height > 0, bounds.width > 0, bounds.height > 0 else {
+            return bounds
+        }
+
+        let scale = min(bounds.width / sourceSize.width, bounds.height / sourceSize.height)
+        let size = CGSize(width: sourceSize.width * scale, height: sourceSize.height * scale)
+        return CGRect(
+            x: bounds.minX + ((bounds.width - size.width) / 2),
+            y: bounds.minY + ((bounds.height - size.height) / 2),
+            width: size.width,
+            height: size.height
+        )
     }
 
     private func attributedText(
@@ -831,6 +1059,16 @@ private struct MeasuredExportBlock {
     var horizontalInset: CGFloat
 }
 
+private struct PDFTableLayout {
+    var columnWidths: [CGFloat]
+    var rowHeights: [CGFloat]
+    var captionHeight: CGFloat
+
+    var totalHeight: CGFloat {
+        captionHeight + rowHeights.reduce(0, +)
+    }
+}
+
 private struct SectionTemplateProvider: PageTemplateProvider, Sendable {
     var template: PageTemplate
     var headerFooter: ExportHeaderFooterConfiguration?
@@ -853,15 +1091,4 @@ private enum PDFTextWeight {
     case regular
     case semibold
     case monospaced
-}
-
-private extension ExportBlockContent {
-    var altTextOrPlaceholder: String {
-        switch self {
-        case let .image(_, _, altText):
-            altText ?? "Image"
-        default:
-            ""
-        }
-    }
 }

@@ -110,14 +110,19 @@ public struct HTMLExporter: DocumentExporter {
         case let .list(content, ordered, _):
             let tag = ordered ? "ol" : "ul"
             return "<\(tag)><li>\(render(text: content))</li></\(tag)>"
-        case let .table(rows):
+        case let .table(rows, _, caption):
             let renderedRows = rows.map { row in
                 "<tr>" + row.map { "<td>\(render(text: $0))</td>" }.joined() + "</tr>"
             }.joined()
-            return "<table>\(renderedRows)</table>"
-        case let .image(_, url, altText):
-            let source = url?.absoluteString ?? ""
-            return "<img src=\"\(escape(source))\" alt=\"\(escape(altText ?? ""))\">"
+            let renderedCaption = caption.map { "<caption>\(render(text: $0))</caption>" } ?? ""
+            return "<table>\(renderedCaption)\(renderedRows)</table>"
+        case let .image(data, url, altText, size):
+            let source = imageSource(data: data, url: url)
+            let srcAttribute = source.isEmpty ? "" : " src=\"\(escape(source))\""
+            let sizeAttributes = size.map {
+                " width=\"\(Int(max($0.width.rounded(), 1)))\" height=\"\(Int(max($0.height.rounded(), 1)))\""
+            } ?? ""
+            return "<img\(srcAttribute) alt=\"\(escape(altText ?? ""))\"\(sizeAttributes)>"
         case .divider:
             return "<hr>"
         }
@@ -261,6 +266,28 @@ public struct HTMLExporter: DocumentExporter {
             value = "<a href=\"\(escape(link.absoluteString))\">\(value)</a>"
         }
         return value
+    }
+
+    private func imageSource(data: Data?, url: URL?) -> String {
+        if let url {
+            return url.absoluteString
+        }
+
+        guard let data, let mimeType = mimeType(for: data) else { return "" }
+        return "data:\(mimeType);base64,\(data.base64EncodedString())"
+    }
+
+    private func mimeType(for data: Data) -> String? {
+        if data.starts(with: Data([0x89, 0x50, 0x4E, 0x47])) {
+            return "image/png"
+        }
+        if data.starts(with: Data([0xFF, 0xD8, 0xFF])) {
+            return "image/jpeg"
+        }
+        if data.starts(with: Data("GIF8".utf8)) {
+            return "image/gif"
+        }
+        return nil
     }
 
     private func escape(_ value: String) -> String {

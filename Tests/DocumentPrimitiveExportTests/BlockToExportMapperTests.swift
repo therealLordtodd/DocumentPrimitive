@@ -1,3 +1,4 @@
+import CoreGraphics
 import ExportKit
 import Foundation
 import Testing
@@ -56,5 +57,63 @@ struct BlockToExportMapperTests {
         #expect(section.headerFooter?.footer?.right.plainText == "{TITLE}")
         #expect(section.footnotes.first?.anchorSourceIdentifier == "IntroAnchor")
         #expect(section.footnotes.first?.content.plainText == "Footnote body")
+    }
+
+    @Test func preservesTableAndImageMetadataForExport() {
+        let imageSize = CGSize(width: 320, height: 180)
+        let document = Document(
+            title: "Draft",
+            sections: [
+                DocumentSection(
+                    blocks: [
+                        Block(
+                            type: .table,
+                            content: .table(
+                                TableContent(
+                                    rows: [
+                                        [.plain("Quarter"), .plain("Revenue")],
+                                        [.plain("Q1"), .plain("$120k")],
+                                    ],
+                                    columnWidths: [2, 1],
+                                    caption: .plain("Quarterly Results")
+                                )
+                            )
+                        ),
+                        Block(
+                            type: .image,
+                            content: .image(
+                                ImageContent(
+                                    data: Data([0x89, 0x50, 0x4E, 0x47]),
+                                    altText: "Revenue chart",
+                                    size: imageSize
+                                )
+                            )
+                        ),
+                    ]
+                ),
+            ]
+        )
+
+        let exportable = BlockToExportMapper().map(document: document)
+        #expect(exportable.blocks.count == 2)
+
+        guard case let .table(rows, columnWidths, caption) = exportable.blocks[0].content else {
+            Issue.record("Expected table export content")
+            return
+        }
+
+        #expect(rows.count == 2)
+        #expect(rows[0][0].plainText == "Quarter")
+        #expect(columnWidths == [2, 1])
+        #expect(caption?.plainText == "Quarterly Results")
+
+        guard case let .image(data, _, altText, size) = exportable.blocks[1].content else {
+            Issue.record("Expected image export content")
+            return
+        }
+
+        #expect(data == Data([0x89, 0x50, 0x4E, 0x47]))
+        #expect(altText == "Revenue chart")
+        #expect(size == imageSize)
     }
 }

@@ -70,4 +70,36 @@ struct MarkdownExporterTests {
         #expect(markdown.contains("2. Second note"))
         #expect(markdown.contains("<!-- section 1 start-page: 4 columns: 1 -->"))
     }
+
+    @Test func exportsTableCaptionsToMarkdown() async throws {
+        let document = Document(
+            title: "Draft",
+            sections: [
+                DocumentSection(
+                    blocks: [
+                        Block(
+                            type: .table,
+                            content: .table(
+                                TableContent(
+                                    rows: [
+                                        [.plain("Quarter"), .plain("Revenue")],
+                                        [.plain("Q1"), .plain("$120k")],
+                                    ],
+                                    caption: .plain("Quarterly Results")
+                                )
+                            )
+                        ),
+                    ]
+                ),
+            ]
+        )
+
+        let exportable = BlockToExportMapper().map(document: document)
+        let data = try await MarkdownExporter().export(exportable, options: ExportOptions())
+        let markdown = String(decoding: data, as: UTF8.self)
+
+        #expect(markdown.contains("_Quarterly Results_"))
+        #expect(markdown.contains("| Quarter | Revenue |"))
+        #expect(markdown.contains("| --- | --- |"))
+    }
 }
