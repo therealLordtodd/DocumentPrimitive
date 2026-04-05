@@ -1,13 +1,18 @@
 import DocumentPrimitive
 import ExportKit
 import Foundation
+import PaginationPrimitive
 import RichTextPrimitive
 
 public struct BlockToExportMapper: Sendable {
     public init() {}
 
     public func map(block: Block) -> ExportBlock {
-        ExportBlock(type: exportType(for: block.type), content: exportContent(for: block.content))
+        ExportBlock(
+            sourceIdentifier: block.id.rawValue,
+            type: exportType(for: block.type),
+            content: exportContent(for: block.content)
+        )
     }
 
     public func map(blocks: [Block]) -> [ExportBlock] {
@@ -16,6 +21,7 @@ public struct BlockToExportMapper: Sendable {
 
     public func map(document: Document) -> ExportableDocument {
         let blocks = map(blocks: document.sections.flatMap(\.blocks))
+        let sections = document.sections.map { map(section: $0, settings: document.settings) }
         let metadata = DocumentMetadata(
             title: document.title,
             author: document.settings.author,
@@ -30,7 +36,33 @@ public struct BlockToExportMapper: Sendable {
                 }
             }
 
-        return ExportableDocument(blocks: blocks, metadata: metadata, images: images)
+        return ExportableDocument(
+            blocks: blocks,
+            metadata: metadata,
+            sections: sections,
+            footnoteConfiguration: exportFootnoteConfiguration(document.settings.footnoteConfig),
+            images: images
+        )
+    }
+
+    public func map(section: DocumentSection, settings: DocumentSettings) -> ExportSection {
+        let layout = section.columnLayout ?? .single
+        let headerFooter = exportHeaderFooterConfiguration(section.headerFooter)
+        let pageSetup = section.pageSetup ?? settings.defaultPageSetup
+        let template = pageSetup.pageTemplate(
+            columns: layout.columns,
+            columnSpacing: layout.spacing,
+            headerHeight: headerFooter?.header == nil ? 0 : 36,
+            footerHeight: headerFooter?.footer == nil ? 0 : 28
+        )
+
+        return ExportSection(
+            blocks: map(blocks: section.blocks),
+            pageTemplate: exportPageTemplate(template),
+            headerFooter: headerFooter,
+            footnotes: section.footnotes.map(exportFootnote(_:)),
+            startPageNumber: section.startPageNumber
+        )
     }
 
     private func exportType(for type: BlockType) -> ExportBlockType {
@@ -92,6 +124,81 @@ public struct BlockToExportMapper: Sendable {
                     link: run.attributes.link
                 )
             }
+        )
+    }
+
+    private func exportTextContent(from runs: [TextRun]) -> ExportTextContent {
+        ExportTextContent(
+            runs: runs.map { run in
+                ExportTextRun(
+                    text: run.text,
+                    bold: run.attributes.bold,
+                    italic: run.attributes.italic,
+                    underline: run.attributes.underline,
+                    strikethrough: run.attributes.strikethrough,
+                    code: run.attributes.code,
+                    link: run.attributes.link
+                )
+            }
+        )
+    }
+
+    private func exportHeaderFooterConfiguration(_ config: HeaderFooterConfig?) -> ExportHeaderFooterConfiguration? {
+        guard let config else { return nil }
+
+        return ExportHeaderFooterConfiguration(
+            header: config.header.map(exportHeaderFooter(_:)),
+            footer: config.footer.map(exportHeaderFooter(_:)),
+            differentFirstPage: config.differentFirstPage,
+            differentOddEven: config.differentOddEven
+        )
+    }
+
+    private func exportHeaderFooter(_ headerFooter: HeaderFooter) -> ExportHeaderFooter {
+        ExportHeaderFooter(
+            left: exportTextContent(from: headerFooter.left),
+            center: exportTextContent(from: headerFooter.center),
+            right: exportTextContent(from: headerFooter.right)
+        )
+    }
+
+    private func exportPageTemplate(_ template: PageTemplate) -> ExportPageTemplate {
+        ExportPageTemplate(
+            size: template.size,
+            margins: ExportPageMargins(
+                top: template.margins.top,
+                leading: template.margins.leading,
+                bottom: template.margins.bottom,
+                trailing: template.margins.trailing
+            ),
+            columns: template.columns,
+            columnSpacing: template.columnSpacing,
+            headerHeight: template.headerHeight,
+            footerHeight: template.footerHeight
+        )
+    }
+
+    private func exportFootnoteConfiguration(_ config: FootnoteConfig) -> ExportFootnoteConfiguration {
+        let placement: ExportFootnotePlacement
+        switch config.placement {
+        case .pageBottom:
+            placement = .pageBottom
+        case .sectionEnd:
+            placement = .sectionEnd
+        case .documentEnd:
+            placement = .documentEnd
+        }
+
+        return ExportFootnoteConfiguration(
+            placement: placement,
+            restartPerSection: config.restartPerSection
+        )
+    }
+
+    private func exportFootnote(_ footnote: Footnote) -> ExportFootnote {
+        ExportFootnote(
+            anchorSourceIdentifier: footnote.anchorBlockID.rawValue,
+            content: exportTextContent(from: footnote.content)
         )
     }
 }

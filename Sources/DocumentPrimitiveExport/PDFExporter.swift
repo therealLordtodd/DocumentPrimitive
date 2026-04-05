@@ -3,6 +3,7 @@ import CoreText
 import ExportKit
 import Foundation
 import PaginationPrimitive
+import SwiftUI
 import UniformTypeIdentifiers
 
 public struct PDFExporter: DocumentExporter {
@@ -13,18 +14,15 @@ public struct PDFExporter: DocumentExporter {
     public init() {}
 
     public func export(_ document: ExportableDocument, options: ExportOptions) async throws -> Data {
-        let template = exportTemplate(includeMetadata: options.includeMetadata)
-        let descriptors = measuredBlocks(for: document, template: template)
-        let items = descriptors.map(\.item)
-        let pages = await MainActor.run { () -> [PaginationPrimitive.ComputedPage] in
-            let engine = PaginationEngine(template: template)
-            engine.paginate(items)
-            return engine.pages
+        let pages = if document.sections.isEmpty {
+            try await prepareFlatPages(for: document, options: options)
+        } else {
+            try await prepareSectionedPages(for: document, options: options)
         }
 
-        let descriptorByID = Dictionary(uniqueKeysWithValues: descriptors.map { ($0.item.id, $0) })
+        let renderPages = pages.isEmpty ? [PreparedPDFPage.fallback(for: document, includeMetadata: options.includeMetadata)] : pages
         let data = NSMutableData()
-        var mediaBox = CGRect(origin: .zero, size: template.size)
+        var mediaBox = CGRect(origin: .zero, size: renderPages[0].template.size)
 
         guard
             let consumer = CGDataConsumer(data: data),
@@ -33,39 +31,46 @@ public struct PDFExporter: DocumentExporter {
             return Data()
         }
 
-        let renderedPages = pages.isEmpty ? [PaginationPrimitive.ComputedPage(pageNumber: 1, template: template)] : pages
-        for page in renderedPages {
+        for page in renderPages {
             context.beginPDFPage(nil)
             context.setFillColor(gray: 1, alpha: 1)
-            context.fill(CGRect(origin: .zero, size: template.size))
+            context.fill(CGRect(origin: .zero, size: page.template.size))
 
             context.saveGState()
-            context.translateBy(x: 0, y: template.size.height)
+            context.translateBy(x: 0, y: page.template.size.height)
             context.scaleBy(x: 1, y: -1)
 
             drawPageChrome(
                 context: context,
-                template: template,
-                pageNumber: page.pageNumber,
-                pageCount: renderedPages.count,
+                page: page,
                 document: document,
                 includeMetadata: options.includeMetadata
             )
 
             let contentRect = CGRect(
-                x: template.margins.leading,
-                y: template.margins.top + template.headerHeight,
-                width: template.contentWidth,
-                height: template.contentHeight
+                x: page.template.margins.leading,
+                y: page.template.margins.top + page.template.headerHeight,
+                width: page.template.contentWidth,
+                height: page.template.contentHeight
             )
 
             for placement in page.placements {
-                guard let descriptor = descriptorByID[placement.itemID] else { continue }
+                guard let descriptor = page.descriptorByID[placement.itemID] else { continue }
                 draw(
                     descriptor: descriptor,
                     placement: placement,
                     in: contentRect,
                     context: context
+                )
+            }
+
+            if !page.footnotes.isEmpty {
+                drawFootnotes(
+                    page.footnotes,
+                    in: contentRect,
+                    context: context,
+                    page: page,
+                    document: document
                 )
             }
 
@@ -77,7 +82,116 @@ public struct PDFExporter: DocumentExporter {
         return data as Data
     }
 
-    private func exportTemplate(includeMetadata: Bool) -> PageTemplate {
+    private func prepareFlatPages(
+        for document: ExportableDocument,
+        options: ExportOptions
+    ) async throws -> [PreparedPDFPage] {
+        let template = fallbackTemplate(includeMetadata: options.includeMetadata)
+        let descriptors = measuredBlocks(for: document.blocks, template: template)
+        let pages = try await paginate(
+            descriptors: descriptors,
+            templateProvider: UniformTemplateProvider(template: template),
+            sectionIndex: 0
+        )
+
+        let rawPages = pages.isEmpty ? [PaginationPrimitive.ComputedPage(pageNumber: 1, template: template)] : pages
+        let descriptorByID = Dictionary(uniqueKeysWithValues: descriptors.map { ($0.item.id, $0) })
+
+        return rawPages.enumerated().map { index, page in
+            PreparedPDFPage(
+                pageNumber: index + 1,
+                pageCount: rawPages.count,
+                sectionNumber: 1,
+                pageIndexInSection: index,
+                template: page.template,
+                placements: page.placements,
+                descriptorByID: descriptorByID,
+                headerFooter: nil,
+                footnotes: []
+            )
+        }
+    }
+
+    private func prepareSectionedPages(
+        for document: ExportableDocument,
+        options: ExportOptions
+    ) async throws -> [PreparedPDFPage] {
+        var prepared: [PreparedPDFPage] = []
+        var nextPageNumber = 1
+        let footnoteConfiguration = document.footnoteConfiguration
+
+        for (sectionIndex, section) in document.sections.enumerated() {
+            let template = pageTemplate(from: section.pageTemplate)
+            let descriptors = measuredBlocks(
+                for: section.blocks,
+                template: template,
+                footnotes: section.footnotes,
+                footnoteConfiguration: footnoteConfiguration
+            )
+            let provider = SectionTemplateProvider(template: template, headerFooter: section.headerFooter)
+            let pages = try await paginate(
+                descriptors: descriptors,
+                templateProvider: provider,
+                sectionIndex: sectionIndex
+            )
+            let descriptorByID = Dictionary(uniqueKeysWithValues: descriptors.map { ($0.item.id, $0) })
+            let rawPages = pages.isEmpty ? [PaginationPrimitive.ComputedPage(pageNumber: 1, template: provider.template(forPage: 1, isFirst: true, section: sectionIndex))] : pages
+            let sectionStart = section.startPageNumber ?? nextPageNumber
+
+            for (pageIndex, page) in rawPages.enumerated() {
+                let visibleSourceIdentifiers = Set(
+                    page.placements.compactMap { placement in
+                        descriptorByID[placement.itemID]?.block.sourceIdentifier
+                    }
+                )
+                prepared.append(
+                    PreparedPDFPage(
+                        pageNumber: sectionStart + pageIndex,
+                        pageCount: 0,
+                        sectionNumber: sectionIndex + 1,
+                        pageIndexInSection: pageIndex,
+                        template: page.template,
+                        placements: page.placements,
+                        descriptorByID: descriptorByID,
+                        headerFooter: section.headerFooter,
+                        footnotes: resolvedFootnotes(
+                            for: section,
+                            sectionIndex: sectionIndex,
+                            pageIndexInSection: pageIndex,
+                            pageCountInSection: rawPages.count,
+                            visibleSourceIdentifiers: visibleSourceIdentifiers,
+                            documentSections: document.sections,
+                            configuration: footnoteConfiguration
+                        )
+                    )
+                )
+            }
+
+            nextPageNumber = (prepared.last?.pageNumber ?? (sectionStart - 1)) + 1
+        }
+
+        let totalPageCount = prepared.count
+        return prepared.map { page in
+            var updated = page
+            updated.pageCount = totalPageCount
+            return updated
+        }
+    }
+
+    private func paginate(
+        descriptors: [MeasuredExportBlock],
+        templateProvider: any PageTemplateProvider,
+        sectionIndex: Int
+    ) async throws -> [PaginationPrimitive.ComputedPage] {
+        let items = descriptors.map(\.item)
+        return await MainActor.run {
+            let engine = PaginationEngine(templateProvider: templateProvider)
+            engine.paginate(items, section: sectionIndex)
+            return engine.pages
+        }
+    }
+
+    private func fallbackTemplate(includeMetadata: Bool) -> PageTemplate {
         let base = PageTemplate.letter
         return PageTemplate(
             size: base.size,
@@ -85,6 +199,45 @@ public struct PDFExporter: DocumentExporter {
             headerHeight: includeMetadata ? 24 : 0,
             footerHeight: 22
         )
+    }
+
+    private func pageTemplate(from exportTemplate: ExportPageTemplate) -> PageTemplate {
+        PageTemplate(
+            size: exportTemplate.size,
+            margins: SwiftUI.EdgeInsets(
+                top: exportTemplate.margins.top,
+                leading: exportTemplate.margins.leading,
+                bottom: exportTemplate.margins.bottom,
+                trailing: exportTemplate.margins.trailing
+            ),
+            columns: exportTemplate.columns,
+            columnSpacing: exportTemplate.columnSpacing,
+            headerHeight: exportTemplate.headerHeight,
+            footerHeight: exportTemplate.footerHeight
+        )
+    }
+
+    private func resolvedFootnotes(
+        for section: ExportSection,
+        sectionIndex: Int,
+        pageIndexInSection: Int,
+        pageCountInSection: Int,
+        visibleSourceIdentifiers: Set<String>,
+        documentSections: [ExportSection],
+        configuration: ExportFootnoteConfiguration?
+    ) -> [ExportFootnote] {
+        guard let configuration else { return [] }
+
+        switch configuration.placement {
+        case .pageBottom:
+            return section.footnotes.filter { visibleSourceIdentifiers.contains($0.anchorSourceIdentifier) }
+        case .sectionEnd:
+            guard pageIndexInSection == pageCountInSection - 1 else { return [] }
+            return section.footnotes
+        case .documentEnd:
+            guard sectionIndex == documentSections.count - 1, pageIndexInSection == pageCountInSection - 1 else { return [] }
+            return documentSections.flatMap(\.footnotes)
+        }
     }
 
     private func pdfMetadata(for document: ExportableDocument) -> [String: Any] {
@@ -101,13 +254,45 @@ public struct PDFExporter: DocumentExporter {
 
     private func drawPageChrome(
         context: CGContext,
-        template: PageTemplate,
-        pageNumber: Int,
-        pageCount: Int,
+        page: PreparedPDFPage,
         document: ExportableDocument,
         includeMetadata: Bool
     ) {
-        if includeMetadata, template.headerHeight > 0 {
+        if let headerFooter = resolvedHeaderFooter(for: page) {
+            if let header = headerFooter.header, page.template.headerHeight > 0 {
+                drawHeaderFooterRegion(
+                    header,
+                    in: CGRect(
+                        x: page.template.margins.leading,
+                        y: page.template.margins.top,
+                        width: page.template.contentWidth,
+                        height: page.template.headerHeight
+                    ),
+                    context: context,
+                    page: page,
+                    document: document
+                )
+            }
+
+            if let footer = headerFooter.footer, page.template.footerHeight > 0 {
+                drawHeaderFooterRegion(
+                    footer,
+                    in: CGRect(
+                        x: page.template.margins.leading,
+                        y: page.template.size.height - page.template.margins.bottom - page.template.footerHeight,
+                        width: page.template.contentWidth,
+                        height: page.template.footerHeight
+                    ),
+                    context: context,
+                    page: page,
+                    document: document
+                )
+            }
+
+            return
+        }
+
+        if includeMetadata, page.template.headerHeight > 0 {
             drawText(
                 attributedString: styledLine(
                     text: document.metadata.title,
@@ -115,10 +300,10 @@ public struct PDFExporter: DocumentExporter {
                     weight: .semibold
                 ),
                 in: CGRect(
-                    x: template.margins.leading,
-                    y: template.margins.top,
-                    width: template.contentWidth,
-                    height: template.headerHeight
+                    x: page.template.margins.leading,
+                    y: page.template.margins.top,
+                    width: page.template.contentWidth,
+                    height: page.template.headerHeight
                 ),
                 context: context
             )
@@ -126,20 +311,116 @@ public struct PDFExporter: DocumentExporter {
 
         drawText(
             attributedString: styledLine(
-                text: "Page \(pageNumber) of \(pageCount)",
+                text: "Page \(page.pageNumber) of \(page.pageCount)",
                 fontSize: 10,
                 weight: .regular,
                 color: CGColor(gray: 0.35, alpha: 1)
             ),
             in: CGRect(
-                x: template.margins.leading,
-                y: template.size.height - template.margins.bottom - template.footerHeight,
-                width: template.contentWidth,
-                height: template.footerHeight
+                x: page.template.margins.leading,
+                y: page.template.size.height - page.template.margins.bottom - page.template.footerHeight,
+                width: page.template.contentWidth,
+                height: page.template.footerHeight
             ),
             context: context,
             alignment: .center
         )
+    }
+
+    private func drawHeaderFooterRegion(
+        _ region: ExportHeaderFooter,
+        in rect: CGRect,
+        context: CGContext,
+        page: PreparedPDFPage,
+        document: ExportableDocument
+    ) {
+        let columnWidth = rect.width / 3
+
+        drawText(
+            attributedString: attributedText(
+                for: resolvedTextContent(region.left, page: page, document: document),
+                baseFontSize: 10,
+                defaultColor: CGColor(gray: 0.35, alpha: 1)
+            ),
+            in: CGRect(x: rect.minX, y: rect.minY, width: columnWidth, height: rect.height),
+            context: context
+        )
+
+        drawText(
+            attributedString: attributedText(
+                for: resolvedTextContent(region.center, page: page, document: document),
+                baseFontSize: 10,
+                defaultColor: CGColor(gray: 0.35, alpha: 1)
+            ),
+            in: CGRect(x: rect.minX + columnWidth, y: rect.minY, width: columnWidth, height: rect.height),
+            context: context,
+            alignment: .center
+        )
+
+        drawText(
+            attributedString: attributedText(
+                for: resolvedTextContent(region.right, page: page, document: document),
+                baseFontSize: 10,
+                defaultColor: CGColor(gray: 0.35, alpha: 1)
+            ),
+            in: CGRect(x: rect.minX + (columnWidth * 2), y: rect.minY, width: columnWidth, height: rect.height),
+            context: context,
+            alignment: .right
+        )
+    }
+
+    private func resolvedHeaderFooter(for page: PreparedPDFPage) -> ExportHeaderFooterConfiguration? {
+        guard var config = page.headerFooter else { return nil }
+
+        if config.differentFirstPage, page.pageIndexInSection == 0 {
+            config.header = nil
+            config.footer = nil
+        } else if config.differentOddEven, page.pageNumber.isMultiple(of: 2) {
+            config.header = config.header.map { ExportHeaderFooter(left: $0.right, center: $0.center, right: $0.left) }
+            config.footer = config.footer.map { ExportHeaderFooter(left: $0.right, center: $0.center, right: $0.left) }
+        }
+
+        return config
+    }
+
+    private func resolvedTextContent(
+        _ content: ExportTextContent,
+        page: PreparedPDFPage,
+        document: ExportableDocument
+    ) -> ExportTextContent {
+        ExportTextContent(
+            runs: content.runs.map { run in
+                var updated = run
+                updated.text = resolveInlineTokens(run.text, page: page, document: document)
+                return updated
+            }
+        )
+    }
+
+    private func resolveInlineTokens(
+        _ text: String,
+        page: PreparedPDFPage,
+        document: ExportableDocument
+    ) -> String {
+        let resolvedDate = (document.metadata.modifiedAt ?? document.metadata.createdAt ?? Date())
+            .formatted(date: .abbreviated, time: .omitted)
+
+        return [
+            ("{{pageNumber}}", String(page.pageNumber)),
+            ("{{pageCount}}", String(page.pageCount)),
+            ("{{sectionNumber}}", String(page.sectionNumber)),
+            ("{{date}}", resolvedDate),
+            ("{{title}}", document.metadata.title),
+            ("{{author}}", document.metadata.author ?? ""),
+            ("{PAGE}", String(page.pageNumber)),
+            ("{NUMPAGES}", String(page.pageCount)),
+            ("{SECTION}", String(page.sectionNumber)),
+            ("{DATE}", resolvedDate),
+            ("{TITLE}", document.metadata.title),
+            ("{AUTHOR}", document.metadata.author ?? ""),
+        ].reduce(text) { partialResult, mapping in
+            partialResult.replacingOccurrences(of: mapping.0, with: mapping.1)
+        }
     }
 
     private func draw(
@@ -212,21 +493,31 @@ public struct PDFExporter: DocumentExporter {
     }
 
     private func measuredBlocks(
-        for document: ExportableDocument,
-        template: PageTemplate
+        for blocks: [ExportBlock],
+        template: PageTemplate,
+        footnotes: [ExportFootnote] = [],
+        footnoteConfiguration: ExportFootnoteConfiguration? = nil
     ) -> [MeasuredExportBlock] {
-        document.blocks.map { block in
-            measuredBlock(for: block, template: template)
+        blocks.map { block in
+            measuredBlock(
+                for: block,
+                template: template,
+                footnotes: footnotes,
+                footnoteConfiguration: footnoteConfiguration
+            )
         }
     }
 
     private func measuredBlock(
         for block: ExportBlock,
-        template: PageTemplate
+        template: PageTemplate,
+        footnotes: [ExportFootnote] = [],
+        footnoteConfiguration: ExportFootnoteConfiguration? = nil
     ) -> MeasuredExportBlock {
         let horizontalInset: CGFloat = block.type == .blockQuote ? 18 : 0
         let availableWidth = max(template.contentWidth - horizontalInset - 8, 72)
         let attributedText = attributedText(for: block)
+        let anchoredFootnotes = footnotes.filter { $0.anchorSourceIdentifier == block.sourceIdentifier }
         let measuredHeight: CGFloat
         switch block.content {
         case .divider:
@@ -243,11 +534,31 @@ public struct PDFExporter: DocumentExporter {
             item: MeasuredItem(
                 height: measuredHeight,
                 canBreakInternally: canBreakInternally(block),
-                keepWithNext: block.type == .heading
+                keepWithNext: block.type == .heading,
+                footnoteReservation: footnoteReservation(
+                    for: anchoredFootnotes,
+                    configuration: footnoteConfiguration
+                )
             ),
             attributedText: attributedText,
             horizontalInset: horizontalInset
         )
+    }
+
+    private func footnoteReservation(
+        for footnotes: [ExportFootnote],
+        configuration: ExportFootnoteConfiguration?
+    ) -> CGFloat {
+        guard configuration?.placement == .pageBottom, !footnotes.isEmpty else { return 0 }
+
+        return footnotes.reduce(CGFloat(12)) { partialResult, footnote in
+            partialResult + estimatedFootnoteHeight(for: footnote.content)
+        }
+    }
+
+    private func estimatedFootnoteHeight(for content: ExportTextContent) -> CGFloat {
+        let lines = max(Int(ceil(Double(max(content.plainText.count, 1)) / 48.0)), 1)
+        return CGFloat(lines) * 14 + 6
     }
 
     private func canBreakInternally(_ block: ExportBlock) -> Bool {
@@ -391,12 +702,18 @@ public struct PDFExporter: DocumentExporter {
     ) {
         let attributed = NSMutableAttributedString(attributedString: attributedString)
         let drawRect: CGRect
-        if alignment == .center {
+
+        switch alignment {
+        case .center:
             let line = CTLineCreateWithAttributedString(attributed)
             let lineWidth = CGFloat(CTLineGetTypographicBounds(line, nil, nil, nil))
             let centeredX = rect.minX + max((rect.width - lineWidth) / 2, 0)
             drawRect = CGRect(x: centeredX, y: rect.minY, width: max(lineWidth, rect.width), height: rect.height)
-        } else {
+        case .right:
+            let line = CTLineCreateWithAttributedString(attributed)
+            let lineWidth = CGFloat(CTLineGetTypographicBounds(line, nil, nil, nil))
+            drawRect = CGRect(x: rect.maxX - lineWidth, y: rect.minY, width: max(lineWidth, rect.width), height: rect.height)
+        default:
             drawRect = rect
         }
 
@@ -413,6 +730,98 @@ public struct PDFExporter: DocumentExporter {
         context.textMatrix = .identity
         CTFrameDraw(frame, context)
     }
+
+    private func drawFootnotes(
+        _ footnotes: [ExportFootnote],
+        in contentRect: CGRect,
+        context: CGContext,
+        page: PreparedPDFPage,
+        document: ExportableDocument
+    ) {
+        let heights = footnotes.map { estimatedFootnoteHeight(for: $0.content) }
+        let totalHeight = heights.reduce(CGFloat(18), +)
+        let startY = max(contentRect.maxY - totalHeight, contentRect.minY)
+
+        context.saveGState()
+        context.setStrokeColor(CGColor(gray: 0.75, alpha: 1))
+        context.setLineWidth(0.8)
+        context.move(to: CGPoint(x: contentRect.minX, y: startY))
+        context.addLine(to: CGPoint(x: contentRect.minX + min(contentRect.width * 0.2, 72), y: startY))
+        context.strokePath()
+        context.restoreGState()
+
+        var yOffset = startY + 6
+        for (index, footnote) in footnotes.enumerated() {
+            let number = footnoteNumber(
+                page: page,
+                localIndex: index,
+                configuration: document.footnoteConfiguration
+            )
+            let rendered = ExportTextContent(
+                runs: [ExportTextRun(text: "\(number). ")] + resolvedTextContent(footnote.content, page: page, document: document).runs
+            )
+            let height = heights[index]
+
+            drawText(
+                attributedString: attributedText(
+                    for: rendered,
+                    baseFontSize: 10,
+                    defaultColor: CGColor(gray: 0.18, alpha: 1)
+                ),
+                in: CGRect(
+                    x: contentRect.minX,
+                    y: yOffset,
+                    width: contentRect.width,
+                    height: height
+                ),
+                context: context
+            )
+
+            yOffset += height
+        }
+    }
+
+    private func footnoteNumber(
+        page: PreparedPDFPage,
+        localIndex: Int,
+        configuration: ExportFootnoteConfiguration?
+    ) -> Int {
+        guard let configuration else { return localIndex + 1 }
+        guard configuration.restartPerSection else { return localIndex + 1 }
+        return localIndex + 1
+    }
+}
+
+private struct PreparedPDFPage {
+    var pageNumber: Int
+    var pageCount: Int
+    var sectionNumber: Int
+    var pageIndexInSection: Int
+    var template: PageTemplate
+    var placements: [PagePlacement]
+    var descriptorByID: [UUID: MeasuredExportBlock]
+    var headerFooter: ExportHeaderFooterConfiguration?
+    var footnotes: [ExportFootnote]
+
+    static func fallback(for document: ExportableDocument, includeMetadata: Bool) -> PreparedPDFPage {
+        let template = PageTemplate(
+            size: PageTemplate.letter.size,
+            margins: PageTemplate.letter.margins,
+            headerHeight: includeMetadata ? 24 : 0,
+            footerHeight: 22
+        )
+        return PreparedPDFPage(
+            pageNumber: 1,
+            pageCount: 1,
+            sectionNumber: 1,
+            pageIndexInSection: 0,
+            template: template,
+            placements: [],
+            descriptorByID: [:],
+            headerFooter: nil,
+            footnotes: []
+        )
+    }
 }
 
 private struct MeasuredExportBlock {
@@ -420,6 +829,24 @@ private struct MeasuredExportBlock {
     var item: MeasuredItem
     var attributedText: NSAttributedString?
     var horizontalInset: CGFloat
+}
+
+private struct SectionTemplateProvider: PageTemplateProvider, Sendable {
+    var template: PageTemplate
+    var headerFooter: ExportHeaderFooterConfiguration?
+
+    func template(forPage pageNumber: Int, isFirst: Bool, section: Int) -> PageTemplate {
+        _ = pageNumber
+        _ = section
+
+        guard let headerFooter else { return template }
+        guard headerFooter.differentFirstPage, isFirst else { return template }
+
+        var adjusted = template
+        adjusted.headerHeight = 0
+        adjusted.footerHeight = 0
+        return adjusted
+    }
 }
 
 private enum PDFTextWeight {
