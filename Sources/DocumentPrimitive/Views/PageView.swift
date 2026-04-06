@@ -9,6 +9,7 @@ import UIKit
 
 public struct PageView: View {
     @Bindable private var state: DocumentEditorState
+    @Environment(\.pageInlineBlockRenderer) private var pageInlineBlockRenderer
     private let page: ComputedPage
     private let fieldCodeResolver = FieldCodeResolver()
     private let footnoteDisplayResolver = FootnoteDisplayResolver()
@@ -243,13 +244,30 @@ public struct PageView: View {
         for block: Block,
         placement: BlockFragmentPlacement
     ) -> some View {
-        if canInlineEdit(block: block), usesFragmentEditor(for: placement) {
+        if let replacement = inlineReplacement(for: block, placement: placement) {
+            replacement
+        } else if canInlineEdit(block: block), usesFragmentEditor(for: placement) {
             fragmentPlacementEditor(placement: placement)
         } else if canInlineEdit(block: block), isEditablePlacement(placement) {
             placementEditor(for: block, placement: placement)
         } else {
             preview(for: blockFragmentResolver.block(for: block, placement: placement))
         }
+    }
+
+    private func inlineReplacement(
+        for block: Block,
+        placement: BlockFragmentPlacement
+    ) -> AnyView? {
+        pageInlineBlockRenderer?(
+            PageInlineBlockContext(
+                page: page,
+                block: block,
+                placement: placement,
+                placementCountForBlock: placementCountByBlockID[placement.blockID, default: 0],
+                isActivePage: state.currentPage == page.pageNumber && state.currentSection == page.sectionID
+            )
+        )
     }
 
     private func canInlineEdit(block: Block) -> Bool {

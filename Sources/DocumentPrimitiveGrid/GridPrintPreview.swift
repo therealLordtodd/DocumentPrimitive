@@ -1,6 +1,7 @@
 #if canImport(GridPrimitive) && canImport(GridPrimitiveTable)
 import DocumentPrimitive
 import Foundation
+import RichTextPrimitive
 import SwiftUI
 
 @MainActor
@@ -135,14 +136,15 @@ public struct GridPageView: View {
     public var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             PageView(state: state, page: page)
+                .pageInlineBlockRenderer(pageInlineRenderer)
 
-            if isActivePage, !tablePlacements.isEmpty {
+            if isActivePage, !detachedTablePlacements.isEmpty {
                 VStack(alignment: .leading, spacing: 12) {
-                    Text(tablePlacements.count == 1 ? "Table On This Page" : "Tables On This Page")
+                    Text(detachedTablePlacements.count == 1 ? "Table Editor" : "Table Editors")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
 
-                    ForEach(tablePlacements) { placement in
+                    ForEach(detachedTablePlacements) { placement in
                         VStack(alignment: .leading, spacing: 8) {
                             if case let .table(table) = placement.block.content,
                                let caption = table.caption?.plainText,
@@ -177,6 +179,45 @@ public struct GridPageView: View {
 
     private var tablePlacements: [GridPageTablePlacement] {
         tableResolver.tablePlacements(on: page, in: state.document)
+    }
+
+    private var detachedTablePlacements: [GridPageTablePlacement] {
+        tablePlacements.filter { !$0.supportsInlineEditing }
+    }
+
+    private var inlineEditableTableIDs: Set<BlockID> {
+        Set(tablePlacements.filter(\.supportsInlineEditing).map(\.block.id))
+    }
+
+    private var pageInlineRenderer: PageInlineBlockRenderer {
+        PageInlineBlockRenderer { context in
+            guard
+                context.isActivePage,
+                inlineEditableTableIDs.contains(context.block.id),
+                context.placementCountForBlock == 1,
+                case .table = context.block.content
+            else {
+                return nil
+            }
+
+            return AnyView(
+                DocumentTableBlockEditor(
+                    editorState: state,
+                    sectionID: context.page.sectionID,
+                    blockID: context.block.id,
+                    editable: true,
+                    configuration: .compact
+                )
+                .frame(
+                    maxWidth: .infinity,
+                    minHeight: max(context.placement.frame.height, 84),
+                    alignment: .topLeading
+                )
+                .padding(10)
+                .background(Color.secondary.opacity(0.09))
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            )
+        }
     }
 }
 #endif

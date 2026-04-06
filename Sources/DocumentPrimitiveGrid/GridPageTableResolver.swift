@@ -7,8 +7,14 @@ struct GridPageTablePlacement: Identifiable, Equatable {
     let sectionID: SectionID
     let block: Block
     let placement: BlockFragmentPlacement?
+    let placementCount: Int
 
     var id: BlockID { block.id }
+
+    var supportsInlineEditing: Bool {
+        guard let placement else { return false }
+        return placementCount == 1 && !placement.isPartial
+    }
 }
 
 struct GridPageTableResolver {
@@ -19,6 +25,9 @@ struct GridPageTableResolver {
         guard let section = document.section(page.sectionID) else { return [] }
 
         if !page.blockPlacements.isEmpty {
+            let placementCounts = page.blockPlacements.reduce(into: [BlockID: Int]()) { counts, placement in
+                counts[placement.blockID, default: 0] += 1
+            }
             var placementsByBlockID: [BlockID: BlockFragmentPlacement] = [:]
             for placement in page.blockPlacements where placementsByBlockID[placement.blockID] == nil {
                 placementsByBlockID[placement.blockID] = placement
@@ -30,7 +39,12 @@ struct GridPageTableResolver {
 
                 let block = section.blocks[placement.blockIndex]
                 guard case .table = block.content else { return nil }
-                return GridPageTablePlacement(sectionID: page.sectionID, block: block, placement: placement)
+                return GridPageTablePlacement(
+                    sectionID: page.sectionID,
+                    block: block,
+                    placement: placement,
+                    placementCount: placementCounts[placement.blockID, default: 1]
+                )
             }
         }
 
@@ -41,7 +55,12 @@ struct GridPageTableResolver {
                 let block = section.blocks[index]
                 guard seen.insert(block.id).inserted else { return nil }
                 guard case .table = block.content else { return nil }
-                return GridPageTablePlacement(sectionID: page.sectionID, block: block, placement: nil)
+                return GridPageTablePlacement(
+                    sectionID: page.sectionID,
+                    block: block,
+                    placement: nil,
+                    placementCount: 1
+                )
             }
         }
     }

@@ -46,6 +46,8 @@ struct GridPageTableResolverTests {
 
         #expect(placements.map(\.block.id) == ["table-1", "table-2"])
         #expect(placements.map(\.sectionID) == ["section", "section"])
+        #expect(placements.map(\.placementCount) == [2, 1])
+        #expect(placements.map(\.supportsInlineEditing) == [false, true])
     }
 
     @Test func resolverFallsBackToBlockRangesWhenNoPlacementsExist() {
@@ -77,6 +79,47 @@ struct GridPageTableResolverTests {
         #expect(placements.count == 1)
         #expect(placements.first?.block.id == "table-1")
         #expect(placements.first?.placement == nil)
+        #expect(placements.first?.supportsInlineEditing == false)
+    }
+
+    @Test func partialTablePlacementRemainsDetached() {
+        let resolver = GridPageTableResolver()
+        let document = Document(
+            title: "Tables",
+            sections: [
+                DocumentSection(
+                    id: "section",
+                    blocks: [
+                        Block(
+                            id: "table-1",
+                            type: .table,
+                            content: .table(TableContent(rows: [[.plain("A1")]]))
+                        ),
+                    ]
+                ),
+            ]
+        )
+        let page = ComputedPage(
+            sectionID: "section",
+            pageNumber: 1,
+            blockRanges: [],
+            blockPlacements: [
+                BlockFragmentPlacement(
+                    id: UUID(),
+                    blockID: "table-1",
+                    blockIndex: 0,
+                    frame: CGRect(x: 0, y: 0, width: 200, height: 80),
+                    isPartial: true,
+                    partialRange: 0...80,
+                    itemHeight: 160
+                ),
+            ]
+        )
+
+        let placements = resolver.tablePlacements(on: page, in: document)
+
+        #expect(placements.count == 1)
+        #expect(placements.first?.supportsInlineEditing == false)
     }
 }
 #endif
