@@ -121,5 +121,44 @@ struct GridPageTableResolverTests {
         #expect(placements.count == 1)
         #expect(placements.first?.supportsInlineEditing == false)
     }
+
+    @Test func oversizedTablePlacementRemainsDetached() {
+        let resolver = GridPageTableResolver()
+        let document = Document(
+            title: "Tables",
+            sections: [
+                DocumentSection(
+                    id: "section",
+                    blocks: [
+                        Block(
+                            id: "table-1",
+                            type: .table,
+                            content: .table(TableContent(rows: [[.plain("A1")]]))
+                        ),
+                    ]
+                ),
+            ]
+        )
+        let page = ComputedPage(
+            sectionID: "section",
+            pageNumber: 1,
+            template: .letter,
+            blockRanges: [],
+            blockPlacements: [
+                BlockFragmentPlacement(
+                    id: UUID(),
+                    blockID: "table-1",
+                    blockIndex: 0,
+                    frame: CGRect(x: 0, y: 0, width: 200, height: 900),
+                    itemHeight: 900
+                ),
+            ]
+        )
+
+        let placements = resolver.tablePlacements(on: page, in: document)
+
+        #expect(placements.count == 1)
+        #expect(placements.first?.supportsInlineEditing == false)
+    }
 }
 #endif

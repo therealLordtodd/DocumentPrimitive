@@ -208,12 +208,13 @@ public struct GridPageView: View {
                     editable: true,
                     configuration: .compact
                 )
+                .padding(8)
                 .frame(
                     maxWidth: .infinity,
                     minHeight: max(context.placement.frame.height, 84),
+                    maxHeight: max(context.placement.frame.height, 84),
                     alignment: .topLeading
                 )
-                .padding(10)
                 .background(Color.secondary.opacity(0.09))
                 .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             )

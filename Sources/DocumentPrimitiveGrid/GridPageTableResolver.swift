@@ -8,12 +8,13 @@ struct GridPageTablePlacement: Identifiable, Equatable {
     let block: Block
     let placement: BlockFragmentPlacement?
     let placementCount: Int
+    let fitsPageContent: Bool
 
     var id: BlockID { block.id }
 
     var supportsInlineEditing: Bool {
         guard let placement else { return false }
-        return placementCount == 1 && !placement.isPartial
+        return placementCount == 1 && !placement.isPartial && fitsPageContent
     }
 }
 
@@ -43,7 +44,8 @@ struct GridPageTableResolver {
                     sectionID: page.sectionID,
                     block: block,
                     placement: placement,
-                    placementCount: placementCounts[placement.blockID, default: 1]
+                    placementCount: placementCounts[placement.blockID, default: 1],
+                    fitsPageContent: placement.frame.height <= page.template.contentHeight
                 )
             }
         }
@@ -59,7 +61,8 @@ struct GridPageTableResolver {
                     sectionID: page.sectionID,
                     block: block,
                     placement: nil,
-                    placementCount: 1
+                    placementCount: 1,
+                    fitsPageContent: false
                 )
             }
         }
