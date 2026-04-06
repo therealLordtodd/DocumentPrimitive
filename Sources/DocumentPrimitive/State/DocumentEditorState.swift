@@ -359,6 +359,7 @@ public final class DocumentEditorState {
 
     func syncCurrentLocation(using editorState: RichTextState) {
         activeEditorRichTextState = editorState
+        mirrorSharedSelection(from: editorState)
 
         guard let position = selectedPosition(in: editorState),
               let location = pageLocation(for: position)
@@ -377,19 +378,22 @@ public final class DocumentEditorState {
     ) {
         activeEditorRichTextState = editorState
 
-        guard let localPosition = selectedPosition(in: editorState),
-              let block = block(in: sectionID, id: placement.blockID)
+        guard let block = block(in: sectionID, id: placement.blockID),
+              let globalSelection = globalSelection(
+                fromFragmentEditor: editorState,
+                block: block,
+                placement: placement
+              )
         else {
             return
         }
 
-        let resolver = BlockFragmentEditResolver()
-        guard let range = resolver.characterRange(for: block, placement: placement) else { return }
+        richTextState.selection = globalSelection
+        richTextState.focusedBlockID = placement.blockID
 
-        let globalPosition = TextPosition(
-            blockID: placement.blockID,
-            offset: min(max(localPosition.offset + range.lowerBound, range.lowerBound), range.upperBound)
-        )
+        guard let globalPosition = selectedPosition(
+            in: RichTextState(selection: globalSelection, focusedBlockID: placement.blockID)
+        ) else { return }
 
         guard let location = pageLocation(for: globalPosition) else { return }
         currentSection = location.sectionID
@@ -524,6 +528,38 @@ public final class DocumentEditorState {
             return focusedBlockID
         }
         return allowedBlockIDs.first
+    }
+
+    private func mirrorSharedSelection(from editorState: RichTextState) {
+        richTextState.selection = editorState.selection
+        richTextState.focusedBlockID = editorState.focusedBlockID
+    }
+
+    private func globalSelection(
+        fromFragmentEditor editorState: RichTextState,
+        block: Block,
+        placement: BlockFragmentPlacement
+    ) -> TextSelection? {
+        let resolver = BlockFragmentEditResolver()
+        guard let range = resolver.characterRange(for: block, placement: placement) else { return nil }
+
+        switch editorState.selection {
+        case let .caret(blockID, offset):
+            return .caret(blockID, offset: min(max(offset + range.lowerBound, range.lowerBound), range.upperBound))
+        case let .range(start, end):
+            return .range(
+                start: TextPosition(
+                    blockID: start.blockID,
+                    offset: min(max(start.offset + range.lowerBound, range.lowerBound), range.upperBound)
+                ),
+                end: TextPosition(
+                    blockID: end.blockID,
+                    offset: min(max(end.offset + range.lowerBound, range.lowerBound), range.upperBound)
+                )
+            )
+        case .blockSelection:
+            return .blockSelection([placement.blockID])
+        }
     }
 
     private func initialFragmentSelection(

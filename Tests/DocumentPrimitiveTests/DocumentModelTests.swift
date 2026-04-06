@@ -302,6 +302,8 @@ struct DocumentModelTests {
 
         #expect(state.currentPage == lastPageNumber)
         #expect(state.currentSection == "section")
+        #expect(state.richTextState.selection == .caret("body", offset: longText.count))
+        #expect(state.richTextState.focusedBlockID == "body")
     }
 
     @MainActor
@@ -528,6 +530,40 @@ struct DocumentModelTests {
         #expect(blocks[0].id == "body")
         #expect(blocks[0].content.textContent?.plainText == "abX")
         #expect(blocks[1].content.textContent?.plainText == "Yij")
+    }
+
+    @MainActor
+    @Test func fragmentEditorSelectionMirrorsBackToSharedState() {
+        let state = DocumentEditorState(
+            document: Document(
+                title: "Draft",
+                sections: [
+                    DocumentSection(
+                        id: "section",
+                        blocks: [
+                            Block(id: "body", type: .paragraph, content: .text(.plain("abcdefghij"))),
+                        ]
+                    ),
+                ]
+            )
+        )
+        let placement = BlockFragmentPlacement(
+            id: UUID(),
+            blockID: "body",
+            blockIndex: 0,
+            frame: .zero,
+            isPartial: true,
+            partialRange: 20...80,
+            itemHeight: 100
+        )
+        let fragmentState = state.richTextState(forFragment: placement, in: "section")
+
+        fragmentState.selection = .caret("body", offset: 2)
+        fragmentState.focusedBlockID = "body"
+        state.syncCurrentLocation(usingFragmentEditor: fragmentState, sectionID: "section", placement: placement)
+
+        #expect(state.richTextState.selection == .caret("body", offset: 4))
+        #expect(state.richTextState.focusedBlockID == "body")
     }
 
     @MainActor
