@@ -30,10 +30,12 @@ public final class DocumentEditorState {
     private var pageDataSources: [String: PageScopedDataSource] = [:]
     private var headerFooterDataSources: [String: HeaderFooterDataSource] = [:]
     private var blockDataSources: [String: BlockDataSource] = [:]
+    private var fragmentDataSources: [String: FragmentDataSource] = [:]
     private var sectionRichTextStates: [SectionID: RichTextState] = [:]
     private var pageRichTextStates: [String: RichTextState] = [:]
     private var headerFooterRichTextStates: [String: RichTextState] = [:]
     private var blockRichTextStates: [String: RichTextState] = [:]
+    private var fragmentRichTextStates: [String: RichTextState] = [:]
     private weak var activeEditorRichTextState: RichTextState?
 
     public init(
@@ -115,6 +117,25 @@ public final class DocumentEditorState {
         return source
     }
 
+    public func dataSource(
+        forFragment placement: BlockFragmentPlacement,
+        in sectionID: SectionID
+    ) -> FragmentDataSource {
+        let key = fragmentDataSourceKey(for: sectionID, placementID: placement.id)
+        if let existing = fragmentDataSources[key] {
+            existing.placement = placement
+            return existing
+        }
+
+        let source = FragmentDataSource(
+            editorState: self,
+            sectionID: sectionID,
+            placement: placement
+        )
+        fragmentDataSources[key] = source
+        return source
+    }
+
     public func richTextState(forSection sectionID: SectionID) -> RichTextState {
         if let existing = sectionRichTextStates[sectionID] {
             return existing
@@ -164,6 +185,20 @@ public final class DocumentEditorState {
 
         let state = makeDerivedRichTextState(allowedBlockIDs: [blockID])
         blockRichTextStates[key] = state
+        return state
+    }
+
+    public func richTextState(
+        forFragment placement: BlockFragmentPlacement,
+        in sectionID: SectionID
+    ) -> RichTextState {
+        let key = fragmentDataSourceKey(for: sectionID, placementID: placement.id)
+        if let existing = fragmentRichTextStates[key] {
+            return existing
+        }
+
+        let state = makeFragmentRichTextState(for: placement, in: sectionID)
+        fragmentRichTextStates[key] = state
         return state
     }
 
@@ -335,6 +370,32 @@ public final class DocumentEditorState {
         currentPage = location.pageNumber
     }
 
+    func syncCurrentLocation(
+        usingFragmentEditor editorState: RichTextState,
+        sectionID: SectionID,
+        placement: BlockFragmentPlacement
+    ) {
+        activeEditorRichTextState = editorState
+
+        guard let localPosition = selectedPosition(in: editorState),
+              let block = block(in: sectionID, id: placement.blockID)
+        else {
+            return
+        }
+
+        let resolver = BlockFragmentEditResolver()
+        guard let range = resolver.characterRange(for: block, placement: placement) else { return }
+
+        let globalPosition = TextPosition(
+            blockID: placement.blockID,
+            offset: min(max(localPosition.offset + range.lowerBound, range.lowerBound), range.upperBound)
+        )
+
+        guard let location = pageLocation(for: globalPosition) else { return }
+        currentSection = location.sectionID
+        currentPage = location.pageNumber
+    }
+
     private func pageDataSourceKey(for page: ComputedPage) -> String {
         "\(page.sectionID.rawValue)#\(page.pageNumber)"
     }
@@ -345,6 +406,10 @@ public final class DocumentEditorState {
 
     private func blockDataSourceKey(for sectionID: SectionID, blockID: BlockID) -> String {
         "\(sectionID.rawValue)#\(blockID.rawValue)"
+    }
+
+    private func fragmentDataSourceKey(for sectionID: SectionID, placementID: UUID) -> String {
+        "\(sectionID.rawValue)#fragment#\(placementID.uuidString)"
     }
 
     private func broadcastSectionMutation(for sectionID: SectionID) {
@@ -360,6 +425,10 @@ public final class DocumentEditorState {
         }
 
         for dataSource in blockDataSources.values where dataSource.sectionID == sectionID {
+            dataSource.emitExternalMutation(.batchUpdate)
+        }
+
+        for dataSource in fragmentDataSources.values where dataSource.sectionID == sectionID {
             dataSource.emitExternalMutation(.batchUpdate)
         }
     }
@@ -391,6 +460,12 @@ public final class DocumentEditorState {
         })
         blockRichTextStates = blockRichTextStates.filter { validBlockKeys.contains($0.key) }
         blockDataSources = blockDataSources.filter { validBlockKeys.contains($0.key) }
+
+        let validFragmentKeys = Set(layoutEngine.pages.flatMap { page in
+            page.blockPlacements.map { fragmentDataSourceKey(for: page.sectionID, placementID: $0.id) }
+        })
+        fragmentRichTextStates = fragmentRichTextStates.filter { validFragmentKeys.contains($0.key) }
+        fragmentDataSources = fragmentDataSources.filter { validFragmentKeys.contains($0.key) }
     }
 
     func pageScrollKey(for page: ComputedPage) -> String {
@@ -408,6 +483,20 @@ public final class DocumentEditorState {
             findState: richTextState.findState,
             writingMode: richTextState.writingMode,
             focusedBlockID: initialFocusedBlockID(for: allowedBlockIDs),
+            zoomLevel: richTextState.zoomLevel
+        )
+    }
+
+    private func makeFragmentRichTextState(
+        for placement: BlockFragmentPlacement,
+        in sectionID: SectionID
+    ) -> RichTextState {
+        RichTextState(
+            selection: initialFragmentSelection(for: placement, in: sectionID),
+            activeAttributes: richTextState.activeAttributes,
+            findState: richTextState.findState,
+            writingMode: richTextState.writingMode,
+            focusedBlockID: placement.blockID,
             zoomLevel: richTextState.zoomLevel
         )
     }
@@ -435,6 +524,35 @@ public final class DocumentEditorState {
             return focusedBlockID
         }
         return allowedBlockIDs.first
+    }
+
+    private func initialFragmentSelection(
+        for placement: BlockFragmentPlacement,
+        in sectionID: SectionID
+    ) -> TextSelection {
+        let resolver = BlockFragmentEditResolver()
+        guard let block = block(in: sectionID, id: placement.blockID),
+              let range = resolver.characterRange(for: block, placement: placement)
+        else {
+            return .caret(placement.blockID, offset: 0)
+        }
+
+        switch richTextState.selection {
+        case let .caret(blockID, offset) where blockID == placement.blockID:
+            let local = min(max(offset - range.lowerBound, 0), range.count)
+            return .caret(blockID, offset: local)
+        case let .range(start, end)
+            where start.blockID == placement.blockID &&
+            end.blockID == placement.blockID &&
+            range.contains(start.offset) &&
+            range.contains(max(end.offset - 1, start.offset)):
+            return .range(
+                start: TextPosition(blockID: start.blockID, offset: start.offset - range.lowerBound),
+                end: TextPosition(blockID: end.blockID, offset: end.offset - range.lowerBound)
+            )
+        default:
+            return .caret(placement.blockID, offset: 0)
+        }
     }
 
     private func visibleBlockIDs(for page: ComputedPage) -> [BlockID] {
@@ -1102,6 +1220,165 @@ public final class BlockDataSource: RichTextDataSource {
         updated.insert(contentsOf: blocks, at: insertionIndex)
         editorState.updateSectionBlocks(updated, for: sectionID)
         return blocks.first?.id
+    }
+
+    private func notify(_ mutation: RichTextMutation) {
+        for observer in observers.values {
+            observer(mutation)
+        }
+    }
+
+    fileprivate func emitExternalMutation(_ mutation: RichTextMutation) {
+        notify(mutation)
+    }
+}
+
+@MainActor
+@Observable
+public final class FragmentDataSource: RichTextDataSource {
+    private unowned let editorState: DocumentEditorState
+    public let sectionID: SectionID
+    public var placement: BlockFragmentPlacement
+
+    private let resolver = BlockFragmentEditResolver()
+    private var observers: [UUID: @MainActor (RichTextMutation) -> Void] = [:]
+    private var pendingDeletionOriginalBlock: Block?
+
+    public init(
+        editorState: DocumentEditorState,
+        sectionID: SectionID,
+        placement: BlockFragmentPlacement
+    ) {
+        self.editorState = editorState
+        self.sectionID = sectionID
+        self.placement = placement
+    }
+
+    public var blocks: [Block] {
+        guard let block = editorState.block(in: sectionID, id: placement.blockID),
+              let fragment = resolver.fragmentBlock(for: block, placement: placement)
+        else {
+            return []
+        }
+        return [fragment]
+    }
+
+    public func block(at index: Int) -> Block {
+        if let block = blocks[safe: index] {
+            return block
+        }
+        return Block(id: placement.blockID, type: .paragraph, content: .text(.plain("")))
+    }
+
+    public func insertBlocks(_ blocks: [Block], at index: Int) {
+        _ = index
+        let originalBlock = pendingDeletionOriginalBlock ?? editorState.block(in: sectionID, id: placement.blockID)
+        pendingDeletionOriginalBlock = nil
+        applyReplacement(blocks, to: originalBlock)
+        notify(.batchUpdate)
+    }
+
+    public func deleteBlocks(at indices: IndexSet) {
+        guard indices.contains(0) else { return }
+        pendingDeletionOriginalBlock = editorState.block(in: sectionID, id: placement.blockID)
+
+        Task { @MainActor [weak self] in
+            await Task.yield()
+            self?.commitPendingDeletionIfNeeded()
+        }
+    }
+
+    public func moveBlocks(from source: IndexSet, to destination: Int) {
+        _ = source
+        _ = destination
+        notify(.batchUpdate)
+    }
+
+    public func replaceBlock(at index: Int, with block: Block) {
+        guard index == 0 else { return }
+        pendingDeletionOriginalBlock = nil
+        applyReplacement([block], to: editorState.block(in: sectionID, id: placement.blockID))
+        notify(.blockReplaced(index: 0))
+    }
+
+    public func updateTextContent(blockID: BlockID, content: TextContent) {
+        guard blockID == placement.blockID,
+              let originalBlock = editorState.block(in: sectionID, id: placement.blockID)
+        else {
+            return
+        }
+
+        pendingDeletionOriginalBlock = nil
+
+        let replacement: Block
+        switch originalBlock.content {
+        case .text:
+            replacement = Block(id: blockID, type: .paragraph, content: .text(content))
+        case let .heading(_, level):
+            replacement = Block(id: blockID, type: .heading, content: .heading(content, level: level))
+        case .blockQuote:
+            replacement = Block(id: blockID, type: .blockQuote, content: .blockQuote(content))
+        case let .list(_, style, indentLevel):
+            replacement = Block(
+                id: blockID,
+                type: .list,
+                content: .list(content, style: style, indentLevel: indentLevel)
+            )
+        case let .codeBlock(_, language):
+            replacement = Block(id: blockID, type: .codeBlock, content: .codeBlock(code: content.plainText, language: language))
+        case .table, .image, .divider, .embed:
+            return
+        }
+
+        applyReplacement([replacement], to: originalBlock)
+        notify(.textUpdated(blockID: blockID))
+    }
+
+    public func updateBlockType(blockID: BlockID, type: BlockType, content: BlockContent) {
+        guard blockID == placement.blockID,
+              let originalBlock = editorState.block(in: sectionID, id: placement.blockID)
+        else {
+            return
+        }
+
+        pendingDeletionOriginalBlock = nil
+        applyReplacement([Block(id: blockID, type: type, content: content)], to: originalBlock)
+        notify(.typeChanged(blockID: blockID))
+    }
+
+    public func addMutationObserver(_ observer: @escaping @MainActor (RichTextMutation) -> Void) -> UUID {
+        let id = UUID()
+        observers[id] = observer
+        return id
+    }
+
+    public func removeMutationObserver(_ id: UUID) {
+        observers.removeValue(forKey: id)
+    }
+
+    private func commitPendingDeletionIfNeeded() {
+        guard let originalBlock = pendingDeletionOriginalBlock else { return }
+        pendingDeletionOriginalBlock = nil
+        applyReplacement([], to: originalBlock)
+        notify(.batchUpdate)
+    }
+
+    private func applyReplacement(_ replacementBlocks: [Block], to originalBlock: Block?) {
+        guard let originalBlock else { return }
+        let updatedBlocks = resolver.mergedBlocks(
+            replacing: placement,
+            in: originalBlock,
+            with: replacementBlocks
+        )
+        replaceOriginalBlock(originalBlockID: originalBlock.id, with: updatedBlocks)
+    }
+
+    private func replaceOriginalBlock(originalBlockID: BlockID, with replacementBlocks: [Block]) {
+        var updated = editorState.blocks(for: sectionID)
+        guard let currentIndex = updated.firstIndex(where: { $0.id == originalBlockID }) else { return }
+        updated.remove(at: currentIndex)
+        updated.insert(contentsOf: replacementBlocks, at: currentIndex)
+        editorState.updateSectionBlocks(updated, for: sectionID)
     }
 
     private func notify(_ mutation: RichTextMutation) {

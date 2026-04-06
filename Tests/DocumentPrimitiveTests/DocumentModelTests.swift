@@ -456,6 +456,81 @@ struct DocumentModelTests {
     }
 
     @MainActor
+    @Test func fragmentDataSourceReplacesOnlyVisibleSliceOfBlock() {
+        let state = DocumentEditorState(
+            document: Document(
+                title: "Draft",
+                sections: [
+                    DocumentSection(
+                        id: "section",
+                        blocks: [
+                            Block(id: "body", type: .paragraph, content: .text(.plain("abcdefghij"))),
+                        ]
+                    ),
+                ]
+            )
+        )
+        let placement = BlockFragmentPlacement(
+            id: UUID(),
+            blockID: "body",
+            blockIndex: 0,
+            frame: .zero,
+            isPartial: true,
+            partialRange: 20...80,
+            itemHeight: 100
+        )
+        let dataSource = state.dataSource(forFragment: placement, in: "section")
+
+        dataSource.updateTextContent(blockID: "body", content: .plain("XYZ"))
+
+        let blocks = state.document.section("section")?.blocks ?? []
+        #expect(blocks.count == 1)
+        #expect(blocks[0].content.textContent?.plainText == "abXYZij")
+    }
+
+    @MainActor
+    @Test func fragmentDataSourceSplitPreservesPrefixAndSuffixAroundReplacement() {
+        let state = DocumentEditorState(
+            document: Document(
+                title: "Draft",
+                sections: [
+                    DocumentSection(
+                        id: "section",
+                        blocks: [
+                            Block(id: "body", type: .paragraph, content: .text(.plain("abcdefghij"))),
+                        ]
+                    ),
+                ]
+            )
+        )
+        let placement = BlockFragmentPlacement(
+            id: UUID(),
+            blockID: "body",
+            blockIndex: 0,
+            frame: .zero,
+            isPartial: true,
+            partialRange: 20...80,
+            itemHeight: 100
+        )
+        let dataSource = state.dataSource(forFragment: placement, in: "section")
+
+        dataSource.deleteBlocks(at: IndexSet(integer: 0))
+        dataSource.insertBlocks(
+            [
+                Block(id: "first", type: .paragraph, content: .text(.plain("X"))),
+                Block(id: "second", type: .paragraph, content: .text(.plain("Y"))),
+            ],
+            at: 0
+        )
+
+        let blocks = state.document.section("section")?.blocks ?? []
+        #expect(blocks.count == 2)
+        #expect(blocks[0].id == "body")
+        #expect(blocks[0].content.textContent?.plainText == "abX")
+        #expect(blocks[1].content.textContent?.plainText == "Yij")
+    }
+
+    @MainActor
     @Test func pageNavigationMovesThroughLaidOutPagesInOrder() {
         let longText = String(repeating: "Body copy ", count: 2000)
         let document = Document(

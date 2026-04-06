@@ -13,7 +13,6 @@ public struct PageView: View {
     private let fieldCodeResolver = FieldCodeResolver()
     private let footnoteDisplayResolver = FootnoteDisplayResolver()
     private let blockFragmentResolver = BlockFragmentResolver()
-    private let continuationEditTargetResolver = PageContinuationEditTargetResolver()
 
     public init(state: DocumentEditorState, page: ComputedPage) {
         self.state = state
@@ -26,44 +25,36 @@ public struct PageView: View {
         let isActivePage = state.currentPage == page.pageNumber && state.currentSection == page.sectionID
         let footnoteHeight = footnoteAreaHeight
         let contentBodyHeight = max(page.template.contentHeight - footnoteHeight, 120)
-        let continuationTargets = continuationEditTargetResolver.targets(on: page, in: state.document)
 
-        VStack(alignment: .leading, spacing: 16) {
-            VStack(spacing: 0) {
-                pageHeader(isActive: isActivePage)
-                    .frame(width: page.template.contentWidth, height: page.template.headerHeight, alignment: .bottom)
-                    .padding(.top, page.template.margins.top)
+        VStack(spacing: 0) {
+            pageHeader(isActive: isActivePage)
+                .frame(width: page.template.contentWidth, height: page.template.headerHeight, alignment: .bottom)
+                .padding(.top, page.template.margins.top)
 
-                contentArea(sectionBlocks: sectionBlocks, isActive: isActivePage, contentBodyHeight: contentBodyHeight)
-                    .frame(width: page.template.contentWidth, height: page.template.contentHeight, alignment: .top)
+            contentArea(sectionBlocks: sectionBlocks, isActive: isActivePage, contentBodyHeight: contentBodyHeight)
+                .frame(width: page.template.contentWidth, height: page.template.contentHeight, alignment: .top)
 
-                pageFooter(isActive: isActivePage)
-                    .frame(width: page.template.contentWidth, height: page.template.footerHeight, alignment: .top)
-                    .padding(.bottom, page.template.margins.bottom)
-            }
-            .frame(
-                width: page.template.size.width,
-                height: page.template.size.height,
-                alignment: .top
-            )
-            .background(.background)
-            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-            .shadow(color: .black.opacity(0.08), radius: 20, y: 8)
-            .overlay(alignment: .topTrailing) {
-                Text("Page \(page.pageNumber)")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .padding(12)
-            }
-            .onTapGesture {
-                state.currentPage = page.pageNumber
-                state.currentSection = page.sectionID
-            }
-
-            if isActivePage, !continuationTargets.isEmpty {
-                continuationEditors(for: continuationTargets)
-                    .frame(width: page.template.size.width, alignment: .leading)
-            }
+            pageFooter(isActive: isActivePage)
+                .frame(width: page.template.contentWidth, height: page.template.footerHeight, alignment: .top)
+                .padding(.bottom, page.template.margins.bottom)
+        }
+        .frame(
+            width: page.template.size.width,
+            height: page.template.size.height,
+            alignment: .top
+        )
+        .background(.background)
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .shadow(color: .black.opacity(0.08), radius: 20, y: 8)
+        .overlay(alignment: .topTrailing) {
+            Text("Page \(page.pageNumber)")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .padding(12)
+        }
+        .onTapGesture {
+            state.currentPage = page.pageNumber
+            state.currentSection = page.sectionID
         }
     }
 
@@ -248,64 +239,13 @@ public struct PageView: View {
     }
 
     @ViewBuilder
-    private func continuationEditors(
-        for targets: [PageContinuationEditTarget]
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(targets.count == 1 ? "Continued Block Editor" : "Continued Block Editors")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
-
-            ForEach(targets) { target in
-                continuationEditorCard(for: target)
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func continuationEditorCard(
-        for target: PageContinuationEditTarget
-    ) -> some View {
-        let editorState = state.richTextState(forBlock: target.block.id, in: target.sectionID)
-        let dataSource = state.dataSource(forBlock: target.block.id, in: target.sectionID)
-
-        VStack(alignment: .leading, spacing: 8) {
-            Text(continuationEditorTitle(for: target.block))
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(.primary)
-
-            Text("This block flows through \(target.placements.count) regions on this page.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-
-            RichTextEditor(
-                state: editorState,
-                dataSource: dataSource,
-                styleSheet: TextStyleSheet.standard
-            )
-            .frame(
-                minHeight: continuationEditorHeight(for: target),
-                maxHeight: continuationEditorHeight(for: target),
-                alignment: .topLeading
-            )
-            .onChange(of: editorState.selection) { _, _ in
-                state.syncCurrentLocation(using: editorState)
-            }
-            .onChange(of: editorState.focusedBlockID) { _, _ in
-                state.syncCurrentLocation(using: editorState)
-            }
-        }
-        .padding(16)
-        .background(Color.secondary.opacity(0.08))
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-    }
-
-    @ViewBuilder
     private func activePlacementView(
         for block: Block,
         placement: BlockFragmentPlacement
     ) -> some View {
-        if canInlineEdit(block: block), isEditablePlacement(placement) {
+        if canInlineEdit(block: block), usesFragmentEditor(for: placement) {
+            fragmentPlacementEditor(placement: placement)
+        } else if canInlineEdit(block: block), isEditablePlacement(placement) {
             placementEditor(for: block, placement: placement)
         } else {
             preview(for: blockFragmentResolver.block(for: block, placement: placement))
@@ -323,6 +263,45 @@ public struct PageView: View {
 
     private func isEditablePlacement(_ placement: BlockFragmentPlacement) -> Bool {
         placementCountByBlockID[placement.blockID, default: 0] == 1
+    }
+
+    private func usesFragmentEditor(for placement: BlockFragmentPlacement) -> Bool {
+        placement.isPartial || placementCountByBlockID[placement.blockID, default: 0] > 1
+    }
+
+    @ViewBuilder
+    private func fragmentPlacementEditor(
+        placement: BlockFragmentPlacement
+    ) -> some View {
+        let editorState = state.richTextState(forFragment: placement, in: page.sectionID)
+        let dataSource = state.dataSource(forFragment: placement, in: page.sectionID)
+        let visibleHeight = max(placement.frame.height, 24)
+
+        RichTextEditor(
+            state: editorState,
+            dataSource: dataSource,
+            styleSheet: TextStyleSheet.standard
+        )
+        .frame(maxWidth: .infinity, minHeight: visibleHeight, maxHeight: visibleHeight, alignment: .topLeading)
+        .clipped()
+        .overlay(alignment: .topLeading) {
+            if showsLeadingContinuation(for: placement) {
+                continuationChip(label: "Continued")
+                    .padding(.top, 4)
+            }
+        }
+        .overlay(alignment: .bottomTrailing) {
+            if showsTrailingContinuation(for: placement) {
+                continuationChip(label: "Continues")
+                    .padding(.bottom, 4)
+            }
+        }
+        .onChange(of: editorState.selection) { _, _ in
+            state.syncCurrentLocation(usingFragmentEditor: editorState, sectionID: page.sectionID, placement: placement)
+        }
+        .onChange(of: editorState.focusedBlockID) { _, _ in
+            state.syncCurrentLocation(usingFragmentEditor: editorState, sectionID: page.sectionID, placement: placement)
+        }
     }
 
     @ViewBuilder
@@ -524,28 +503,6 @@ public struct PageView: View {
                 defaultDesign: defaultDesign
             )
         }
-    }
-
-    private func continuationEditorTitle(for block: Block) -> String {
-        switch block.content {
-        case .text:
-            "Continue Paragraph"
-        case let .heading(_, level):
-            "Continue Heading \(level)"
-        case .blockQuote:
-            "Continue Quote"
-        case .codeBlock:
-            "Continue Code Block"
-        case .list:
-            "Continue List Item"
-        case .table, .image, .divider, .embed:
-            "Continue Block"
-        }
-    }
-
-    private func continuationEditorHeight(for target: PageContinuationEditTarget) -> CGFloat {
-        let itemHeight = target.placements.map(\.itemHeight).max() ?? 160
-        return min(max(itemHeight, 140), 280)
     }
 
     private func previewText(
