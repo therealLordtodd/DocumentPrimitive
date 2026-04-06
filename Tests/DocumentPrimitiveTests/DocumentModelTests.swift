@@ -2,6 +2,7 @@ import BookmarkPrimitive
 import CommentPrimitive
 import Foundation
 import Testing
+import TrackChangesPrimitive
 @testable import DocumentPrimitive
 @testable import RichTextPrimitive
 
@@ -182,6 +183,107 @@ struct DocumentModelTests {
         #expect(state.bookmarks(on: firstPage).isEmpty)
         #expect(Set(state.bookmarks(on: secondPage).map(\.name)) == ["Intro", "Target"])
         #expect(state.comments(on: secondPage).isEmpty)
+    }
+
+    @MainActor
+    @Test func trackingRecordsInsertionAndRejectRestoresOriginalText() {
+        let tracker = ChangeTracker(
+            currentAuthor: TrackChangesPrimitive.AuthorID(rawValue: "todd"),
+            isTracking: true
+        )
+        let state = DocumentEditorState(
+            document: Document(
+                title: "Draft",
+                sections: [
+                    DocumentSection(
+                        id: "section",
+                        blocks: [Block(id: "body", type: .paragraph, content: .text(.plain("Hello")))]
+                    ),
+                ]
+            ),
+            changeTracker: tracker
+        )
+        let source = state.dataSource(for: "section")
+
+        source.updateTextContent(blockID: "body", content: .plain("Hello world"))
+
+        let change = try! #require(tracker.changes.first)
+        #expect(change.type == .insertion(text: " world"))
+        #expect(state.changes(on: state.layoutEngine.pages[0]).count == 1)
+
+        state.rejectChange(change.id)
+
+        #expect(state.document.section("section")?.blocks.first?.content.textContent?.plainText == "Hello")
+        #expect(tracker.changes.isEmpty)
+    }
+
+    @MainActor
+    @Test func trackingRecordsDeletionAndRejectRestoresOriginalText() {
+        let tracker = ChangeTracker(
+            currentAuthor: TrackChangesPrimitive.AuthorID(rawValue: "todd"),
+            isTracking: true
+        )
+        let state = DocumentEditorState(
+            document: Document(
+                title: "Draft",
+                sections: [
+                    DocumentSection(
+                        id: "section",
+                        blocks: [Block(id: "body", type: .paragraph, content: .text(.plain("Hello world")))]
+                    ),
+                ]
+            ),
+            changeTracker: tracker
+        )
+        let source = state.dataSource(for: "section")
+
+        source.updateTextContent(blockID: "body", content: .plain("Hello"))
+
+        let change = try! #require(tracker.changes.first)
+        #expect(change.type == .deletion(text: " world"))
+
+        state.rejectChange(change.id)
+
+        #expect(state.document.section("section")?.blocks.first?.content.textContent?.plainText == "Hello world")
+        #expect(tracker.changes.isEmpty)
+    }
+
+    @MainActor
+    @Test func trackingRecordsFormatChangesAndRejectRestoresAttributes() {
+        let tracker = ChangeTracker(
+            currentAuthor: TrackChangesPrimitive.AuthorID(rawValue: "todd"),
+            isTracking: true
+        )
+        let state = DocumentEditorState(
+            document: Document(
+                title: "Draft",
+                sections: [
+                    DocumentSection(
+                        id: "section",
+                        blocks: [Block(id: "body", type: .paragraph, content: .text(.plain("Hello")))]
+                    ),
+                ]
+            ),
+            changeTracker: tracker
+        )
+        let source = state.dataSource(for: "section")
+
+        source.updateTextContent(
+            blockID: "body",
+            content: TextContent(runs: [TextRun(text: "Hello", attributes: TextAttributes(bold: true))])
+        )
+
+        let change = try! #require(tracker.changes.first)
+        guard case .formatChange = change.type else {
+            Issue.record("Expected a format change")
+            return
+        }
+
+        state.rejectChange(change.id)
+
+        let restoredRun = try! #require(state.document.section("section")?.blocks.first?.content.textContent?.runs.first)
+        #expect(restoredRun.attributes == .plain)
+        #expect(tracker.changes.isEmpty)
     }
 
     @MainActor

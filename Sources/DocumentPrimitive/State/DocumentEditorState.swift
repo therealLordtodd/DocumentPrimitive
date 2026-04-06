@@ -3,6 +3,7 @@ import CommentPrimitive
 import Foundation
 import Observation
 import RichTextPrimitive
+import TrackChangesPrimitive
 
 @MainActor
 @Observable
@@ -29,6 +30,7 @@ public final class DocumentEditorState {
     public var currentSection: SectionID?
     public let bookmarkStore: BookmarkStore
     public let commentStore: CommentStore
+    public let changeTracker: ChangeTracker
     public let layoutEngine: PageLayoutEngine
 
     private var sectionDataSources: [SectionID: SectionDataSource] = [:]
@@ -41,6 +43,7 @@ public final class DocumentEditorState {
     private var headerFooterRichTextStates: [String: RichTextState] = [:]
     private var blockRichTextStates: [String: RichTextState] = [:]
     private var fragmentRichTextStates: [String: RichTextState] = [:]
+    var trackedChangeContexts: [ChangeID: TrackedChangeContext] = [:]
     private weak var activeEditorRichTextState: RichTextState?
 
     public init(
@@ -52,7 +55,8 @@ public final class DocumentEditorState {
         currentPage: Int = 1,
         currentSection: SectionID? = nil,
         bookmarkStore: BookmarkStore = BookmarkStore(),
-        commentStore: CommentStore = CommentStore()
+        commentStore: CommentStore = CommentStore(),
+        changeTracker: ChangeTracker = ChangeTracker(currentAuthor: TrackChangesPrimitive.AuthorID(rawValue: "system"))
     ) {
         self.document = document
         self.richTextState = richTextState
@@ -63,6 +67,7 @@ public final class DocumentEditorState {
         self.currentSection = currentSection ?? document.sections.first?.id
         self.bookmarkStore = bookmarkStore
         self.commentStore = commentStore
+        self.changeTracker = changeTracker
         self.layoutEngine = PageLayoutEngine(document: document)
         self.layoutEngine.reflow()
         syncCurrentLocationToSelection()
@@ -898,6 +903,7 @@ public final class SectionDataSource: RichTextDataSource {
     public func updateTextContent(blockID: BlockID, content: TextContent) {
         var updated = blocks
         guard let index = updated.firstIndex(where: { $0.id == blockID }) else { return }
+        let originalBlock = updated[index]
         switch updated[index].content {
         case .text:
             updated[index].content = .text(content)
@@ -912,6 +918,7 @@ public final class SectionDataSource: RichTextDataSource {
         case .table, .image, .divider, .embed:
             return
         }
+        editorState.recordTrackedChange(in: sectionID, before: originalBlock, after: updated[index])
         editorState.updateSectionBlocks(updated, for: sectionID)
         notify(.textUpdated(blockID: blockID))
     }
@@ -919,8 +926,10 @@ public final class SectionDataSource: RichTextDataSource {
     public func updateBlockType(blockID: BlockID, type: BlockType, content: BlockContent) {
         var updated = blocks
         guard let index = updated.firstIndex(where: { $0.id == blockID }) else { return }
+        let originalBlock = updated[index]
         updated[index].type = type
         updated[index].content = content
+        editorState.recordTrackedChange(in: sectionID, before: originalBlock, after: updated[index])
         editorState.updateSectionBlocks(updated, for: sectionID)
         notify(.typeChanged(blockID: blockID))
     }
@@ -1017,6 +1026,7 @@ public final class PageScopedDataSource: RichTextDataSource {
     public func updateTextContent(blockID: BlockID, content: TextContent) {
         guard let index = blocks.firstIndex(where: { $0.id == blockID }) else { return }
         var updated = blocks
+        let originalBlock = updated[index]
         switch updated[index].content {
         case .text:
             updated[index].content = .text(content)
@@ -1031,6 +1041,7 @@ public final class PageScopedDataSource: RichTextDataSource {
         case .table, .image, .divider, .embed:
             return
         }
+        editorState.recordTrackedChange(in: page.sectionID, before: originalBlock, after: updated[index])
         replaceVisibleBlocks(with: updated)
         notify(.textUpdated(blockID: blockID))
     }
@@ -1038,8 +1049,10 @@ public final class PageScopedDataSource: RichTextDataSource {
     public func updateBlockType(blockID: BlockID, type: BlockType, content: BlockContent) {
         guard let index = blocks.firstIndex(where: { $0.id == blockID }) else { return }
         var updated = blocks
+        let originalBlock = updated[index]
         updated[index].type = type
         updated[index].content = content
+        editorState.recordTrackedChange(in: page.sectionID, before: originalBlock, after: updated[index])
         replaceVisibleBlocks(with: updated)
         notify(.typeChanged(blockID: blockID))
     }
@@ -1206,6 +1219,7 @@ public final class BlockDataSource: RichTextDataSource {
     public func updateTextContent(blockID: BlockID, content: TextContent) {
         guard blockID == self.blockID else { return }
         guard var block = editorState.block(in: sectionID, id: blockID) else { return }
+        let originalBlock = block
 
         switch block.content {
         case .text:
@@ -1222,6 +1236,7 @@ public final class BlockDataSource: RichTextDataSource {
             return
         }
 
+        editorState.recordTrackedChange(in: sectionID, before: originalBlock, after: block)
         editorState.replaceBlock(block, in: sectionID)
         notify(.textUpdated(blockID: blockID))
     }
@@ -1229,8 +1244,10 @@ public final class BlockDataSource: RichTextDataSource {
     public func updateBlockType(blockID: BlockID, type: BlockType, content: BlockContent) {
         guard blockID == self.blockID else { return }
         guard var block = editorState.block(in: sectionID, id: blockID) else { return }
+        let originalBlock = block
         block.type = type
         block.content = content
+        editorState.recordTrackedChange(in: sectionID, before: originalBlock, after: block)
         editorState.replaceBlock(block, in: sectionID)
         notify(.typeChanged(blockID: blockID))
     }
@@ -1383,7 +1400,15 @@ public final class FragmentDataSource: RichTextDataSource {
             return
         }
 
-        applyReplacement([replacement], to: originalBlock)
+        let mergedBlocks = resolver.mergedBlocks(
+            replacing: placement,
+            in: originalBlock,
+            with: [replacement]
+        )
+        if mergedBlocks.count == 1, let mergedBlock = mergedBlocks.first, mergedBlock.id == originalBlock.id {
+            editorState.recordTrackedChange(in: sectionID, before: originalBlock, after: mergedBlock)
+        }
+        replaceOriginalBlock(originalBlockID: originalBlock.id, with: mergedBlocks)
         notify(.textUpdated(blockID: blockID))
     }
 
@@ -1395,7 +1420,16 @@ public final class FragmentDataSource: RichTextDataSource {
         }
 
         pendingDeletionOriginalBlock = nil
-        applyReplacement([Block(id: blockID, type: type, content: content)], to: originalBlock)
+        let replacement = Block(id: blockID, type: type, content: content)
+        let mergedBlocks = resolver.mergedBlocks(
+            replacing: placement,
+            in: originalBlock,
+            with: [replacement]
+        )
+        if mergedBlocks.count == 1, let mergedBlock = mergedBlocks.first, mergedBlock.id == originalBlock.id {
+            editorState.recordTrackedChange(in: sectionID, before: originalBlock, after: mergedBlock)
+        }
+        replaceOriginalBlock(originalBlockID: originalBlock.id, with: mergedBlocks)
         notify(.typeChanged(blockID: blockID))
     }
 

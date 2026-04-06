@@ -69,6 +69,7 @@ let package = Package(
                 "DocumentPrimitive",
                 .product(name: "BookmarkPrimitive", package: "BookmarkPrimitive"),
                 .product(name: "CommentPrimitive", package: "CommentPrimitive"),
+                .product(name: "TrackChangesPrimitive", package: "TrackChangesPrimitive"),
             ]
         ),
         .testTarget(

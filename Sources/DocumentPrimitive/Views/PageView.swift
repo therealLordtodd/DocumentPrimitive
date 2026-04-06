@@ -812,8 +812,58 @@ public struct PageView: View {
                     tint: .orange
                 )
             }
+        let changeAnnotations = trackedChangeAnnotations
 
-        return Array((bookmarks + comments).prefix(5))
+        return Array((bookmarks + comments + changeAnnotations).prefix(6))
+    }
+
+    private var trackedChangeAnnotations: [PageAnnotation] {
+        let changes = state.changes(on: page)
+        guard !changes.isEmpty else { return [] }
+
+        let insertions = changes.filter {
+            if case .insertion = $0.type { return true }
+            return false
+        }.count
+        let deletions = changes.filter {
+            if case .deletion = $0.type { return true }
+            return false
+        }.count
+        let formatChanges = changes.filter {
+            if case .formatChange = $0.type { return true }
+            return false
+        }.count
+
+        var annotations: [PageAnnotation] = []
+        if insertions > 0 {
+            annotations.append(
+                PageAnnotation(
+                    title: insertions == 1 ? "1 insertion" : "\(insertions) insertions",
+                    icon: "plus.circle.fill",
+                    tint: .green
+                )
+            )
+        }
+        if deletions > 0 {
+            annotations.append(
+                PageAnnotation(
+                    title: deletions == 1 ? "1 deletion" : "\(deletions) deletions",
+                    icon: "minus.circle.fill",
+                    tint: .red
+                )
+            )
+        }
+        if formatChanges > 0 {
+            annotations.append(
+                PageAnnotation(
+                    title: formatChanges == 1 ? "1 format change" : "\(formatChanges) format changes",
+                    icon: "paintbrush.fill",
+                    tint: .teal
+                )
+            )
+        }
+
+        return annotations
     }
 
     private func annotationBadge(_ annotation: PageAnnotation) -> some View {
