@@ -1356,6 +1356,11 @@ public struct PageView: View {
         case let .deletion(text):
             return trimmedPreview(for: text, fallback: "Deletion")
         case .formatChange:
+            if let context = state.trackedChangeContexts[change.id],
+               case let .replace(before, after) = context.operation,
+               before.type != after.type {
+                return "Block type: \(readableBlockType(before.type)) -> \(readableBlockType(after.type))"
+            }
             return "Formatting change"
         }
     }
@@ -1387,6 +1392,29 @@ public struct PageView: View {
         let title = count == 1 ? singular : "\(count) \(plural.lowercased())"
         guard !preview.isEmpty else { return title }
         return "\(title): \(String(preview.prefix(72)))"
+    }
+
+    private func readableBlockType(_ type: BlockType) -> String {
+        switch type {
+        case .paragraph:
+            "paragraph"
+        case .heading:
+            "heading"
+        case .blockQuote:
+            "quote"
+        case .codeBlock:
+            "code block"
+        case .list:
+            "list"
+        case .table:
+            "table"
+        case .image:
+            "image"
+        case .divider:
+            "divider"
+        case .embed:
+            "embed"
+        }
     }
 
     private func commentBodyBinding(for comment: Comment) -> Binding<String> {

@@ -53,6 +53,9 @@ extension DocumentEditorState {
             }
             return preview.isEmpty ? "Deletion" : "Delete: \(String(preview.prefix(24)))"
         case .formatChange:
+            if case let .replace(before, after) = context?.operation, before.type != after.type {
+                return "Block type: \(readableBlockType(before.type)) -> \(readableBlockType(after.type))"
+            }
             return "Formatting change"
         }
     }
@@ -657,6 +660,29 @@ extension DocumentEditorState {
         let title = count == 1 ? singular : "\(count) \(plural.lowercased())"
         guard !preview.isEmpty else { return title }
         return "\(title): \(String(preview.prefix(24)))"
+    }
+
+    private func readableBlockType(_ type: BlockType) -> String {
+        switch type {
+        case .paragraph:
+            "paragraph"
+        case .heading:
+            "heading"
+        case .blockQuote:
+            "quote"
+        case .codeBlock:
+            "code block"
+        case .list:
+            "list"
+        case .table:
+            "table"
+        case .image:
+            "image"
+        case .divider:
+            "divider"
+        case .embed:
+            "embed"
+        }
     }
 
     private func successorChangeID(

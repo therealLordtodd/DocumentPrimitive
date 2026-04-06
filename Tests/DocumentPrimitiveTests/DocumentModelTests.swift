@@ -496,6 +496,38 @@ struct DocumentModelTests {
     }
 
     @MainActor
+    @Test func blockTypeChangesReportSpecificSummary() {
+        let tracker = ChangeTracker(
+            currentAuthor: TrackChangesPrimitive.AuthorID(rawValue: "todd"),
+            isTracking: true
+        )
+        let state = DocumentEditorState(
+            document: Document(
+                title: "Draft",
+                sections: [
+                    DocumentSection(
+                        id: "section",
+                        blocks: [Block(id: "body", type: .paragraph, content: .text(.plain("Hello")))]
+                    ),
+                ]
+            ),
+            changeTracker: tracker
+        )
+
+        let source = state.dataSource(for: "section")
+        source.updateBlockType(
+            blockID: "body",
+            type: .heading,
+            content: .heading(.plain("Hello"), level: 1)
+        )
+
+        let change = try! #require(tracker.changes.first)
+        state.focusChange(change.id)
+
+        #expect(state.currentTrackedChangeSummary == "Block type: paragraph -> heading")
+    }
+
+    @MainActor
     @Test func structuralDeletionTrackingRejectRestoresDeletedBlocks() {
         let tracker = ChangeTracker(
             currentAuthor: TrackChangesPrimitive.AuthorID(rawValue: "todd"),
