@@ -567,6 +567,36 @@ struct DocumentModelTests {
     }
 
     @MainActor
+    @Test func blockEditorSyncMirrorsFormattingStateBackToSharedState() {
+        let state = DocumentEditorState(
+            document: Document(
+                title: "Draft",
+                sections: [
+                    DocumentSection(
+                        id: "section",
+                        blocks: [
+                            Block(id: "body", type: .paragraph, content: .text(.plain("Hello"))),
+                        ]
+                    ),
+                ]
+            )
+        )
+        let blockEditorState = state.richTextState(forBlock: "body", in: "section")
+
+        blockEditorState.selection = .caret("body", offset: 3)
+        blockEditorState.focusedBlockID = "body"
+        blockEditorState.activeAttributes.bold = true
+        blockEditorState.zoomLevel = 1.5
+
+        state.syncCurrentLocation(using: blockEditorState)
+
+        #expect(state.richTextState.selection == .caret("body", offset: 3))
+        #expect(state.richTextState.focusedBlockID == "body")
+        #expect(state.richTextState.activeAttributes.bold == true)
+        #expect(state.richTextState.zoomLevel == 1.5)
+    }
+
+    @MainActor
     @Test func pageNavigationMovesThroughLaidOutPagesInOrder() {
         let longText = String(repeating: "Body copy ", count: 2000)
         let document = Document(

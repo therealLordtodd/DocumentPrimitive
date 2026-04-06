@@ -359,7 +359,7 @@ public final class DocumentEditorState {
 
     func syncCurrentLocation(using editorState: RichTextState) {
         activeEditorRichTextState = editorState
-        mirrorSharedSelection(from: editorState)
+        mirrorSharedState(from: editorState)
 
         guard let position = selectedPosition(in: editorState),
               let location = pageLocation(for: position)
@@ -388,6 +388,7 @@ public final class DocumentEditorState {
             return
         }
 
+        mirrorSharedState(from: editorState)
         richTextState.selection = globalSelection
         richTextState.focusedBlockID = placement.blockID
 
@@ -530,9 +531,13 @@ public final class DocumentEditorState {
         return allowedBlockIDs.first
     }
 
-    private func mirrorSharedSelection(from editorState: RichTextState) {
+    private func mirrorSharedState(from editorState: RichTextState) {
         richTextState.selection = editorState.selection
         richTextState.focusedBlockID = editorState.focusedBlockID
+        richTextState.activeAttributes = editorState.activeAttributes
+        richTextState.findState = editorState.findState
+        richTextState.zoomLevel = editorState.zoomLevel
+        richTextState.writingMode = editorState.writingMode
     }
 
     private func globalSelection(
