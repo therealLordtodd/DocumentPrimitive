@@ -287,6 +287,43 @@ struct DocumentModelTests {
     }
 
     @MainActor
+    @Test func changeNavigationMovesSelectionToTrackedEdit() {
+        let tracker = ChangeTracker(
+            currentAuthor: TrackChangesPrimitive.AuthorID(rawValue: "todd"),
+            isTracking: true
+        )
+        let longText = String(repeating: "Page filler ", count: 2500)
+        let state = DocumentEditorState(
+            document: Document(
+                title: "Draft",
+                sections: [
+                    DocumentSection(
+                        id: "section",
+                        blocks: [
+                            Block(id: "lead", type: .paragraph, content: .text(.plain(longText))),
+                            Block(id: "tail", type: .paragraph, content: .text(.plain("Tail"))),
+                        ]
+                    ),
+                ]
+            ),
+            changeTracker: tracker
+        )
+        let source = state.dataSource(for: "section")
+
+        source.updateTextContent(blockID: "tail", content: .plain("Tail edit"))
+        let trackedChange = try! #require(tracker.changes.first)
+        let tailPage = try! #require(state.layoutEngine.pageNumber(for: "tail"))
+
+        state.goToNextChange()
+
+        #expect(state.currentTrackedChangeID == trackedChange.id)
+        #expect(state.currentSection == "section")
+        #expect(state.currentPage == tailPage)
+        #expect(state.richTextState.selection == .caret("tail", offset: 4))
+        #expect(state.richTextState.focusedBlockID == "tail")
+    }
+
+    @MainActor
     @Test func sectionAndPageDataSourcesBroadcastSharedMutations() {
         let document = Document(
             title: "Draft",

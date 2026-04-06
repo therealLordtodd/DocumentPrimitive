@@ -28,6 +28,7 @@ public final class DocumentEditorState {
     public var showFormatting: Bool
     public var currentPage: Int
     public var currentSection: SectionID?
+    public var currentTrackedChangeID: ChangeID?
     public let bookmarkStore: BookmarkStore
     public let commentStore: CommentStore
     public let changeTracker: ChangeTracker
@@ -65,6 +66,7 @@ public final class DocumentEditorState {
         self.showFormatting = showFormatting
         self.currentPage = currentPage
         self.currentSection = currentSection ?? document.sections.first?.id
+        self.currentTrackedChangeID = nil
         self.bookmarkStore = bookmarkStore
         self.commentStore = commentStore
         self.changeTracker = changeTracker

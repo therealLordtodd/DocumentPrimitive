@@ -15,23 +15,79 @@ extension DocumentEditorState {
         return changeTracker.visibleChanges.filter { visibleContentIDs.contains($0.anchor.blockID) }
     }
 
+    public func goToNextChange() {
+        let visibleChanges = changeTracker.visibleChanges
+        guard !visibleChanges.isEmpty else { return }
+
+        guard let currentTrackedChangeID,
+              let currentIndex = visibleChanges.firstIndex(where: { $0.id == currentTrackedChangeID }),
+              currentIndex + 1 < visibleChanges.count
+        else {
+            focusChange(visibleChanges.first!.id)
+            return
+        }
+
+        focusChange(visibleChanges[currentIndex + 1].id)
+    }
+
+    public func goToPreviousChange() {
+        let visibleChanges = changeTracker.visibleChanges
+        guard !visibleChanges.isEmpty else { return }
+
+        guard let currentTrackedChangeID,
+              let currentIndex = visibleChanges.firstIndex(where: { $0.id == currentTrackedChangeID }),
+              currentIndex > 0
+        else {
+            focusChange(visibleChanges.last!.id)
+            return
+        }
+
+        focusChange(visibleChanges[currentIndex - 1].id)
+    }
+
+    public func focusChange(_ id: ChangeID) {
+        guard let change = changeTracker.visibleChanges.first(where: { $0.id == id })
+            ?? changeTracker.changes.first(where: { $0.id == id })
+        else {
+            return
+        }
+
+        currentTrackedChangeID = change.id
+        focusTrackedSelection(
+            TextSelection.caret(
+                BlockID(change.anchor.blockID),
+                offset: change.anchor.offset
+            )
+        )
+    }
+
     public func acceptChange(_ id: ChangeID) {
         trackedChangeContexts.removeValue(forKey: id)
+        if currentTrackedChangeID == id {
+            currentTrackedChangeID = nil
+        }
         changeTracker.accept(id)
     }
 
     public func rejectChange(_ id: ChangeID) {
         guard let context = trackedChangeContexts.removeValue(forKey: id) else {
+            if currentTrackedChangeID == id {
+                currentTrackedChangeID = nil
+            }
             changeTracker.reject(id)
             return
         }
 
         replaceBlock(context.before, in: context.sectionID)
+        if currentTrackedChangeID == id {
+            currentTrackedChangeID = nil
+        }
         changeTracker.reject(id)
     }
 
     public func acceptAllChanges() {
         trackedChangeContexts.removeAll()
+        currentTrackedChangeID = nil
         changeTracker.acceptAll()
     }
 
@@ -45,6 +101,7 @@ extension DocumentEditorState {
         }
 
         trackedChangeContexts.removeAll()
+        currentTrackedChangeID = nil
         changeTracker.rejectAll()
     }
 
@@ -147,6 +204,56 @@ extension DocumentEditorState {
                 }
             }
         )
+    }
+
+    private func focusTrackedSelection(_ selection: TextSelection) {
+        guard let position = trackedPosition(for: selection) else { return }
+        guard let sectionID = sectionID(for: position.blockID) else { return }
+
+        richTextState.selection = selection
+        richTextState.focusedBlockID = position.blockID
+
+        let sectionState = richTextState(forSection: sectionID)
+        sectionState.selection = selection
+        sectionState.focusedBlockID = position.blockID
+
+        let blockState = richTextState(forBlock: position.blockID, in: sectionID)
+        blockState.selection = selection
+        blockState.focusedBlockID = position.blockID
+
+        for page in layoutEngine.pages where page.sectionID == sectionID {
+            guard visibleContentIDsForTrackChanges(on: page).contains(position.blockID.rawValue) else { continue }
+
+            let pageState = richTextState(forPage: page)
+            pageState.selection = selection
+            pageState.focusedBlockID = position.blockID
+
+            for placement in page.blockPlacements where placement.blockID == position.blockID {
+                let fragmentState = richTextState(forFragment: placement, in: sectionID)
+                fragmentState.selection = selection
+                fragmentState.focusedBlockID = position.blockID
+            }
+        }
+
+        syncCurrentLocationToSelection()
+    }
+
+    private func trackedPosition(for selection: TextSelection) -> TextPosition? {
+        switch selection {
+        case let .caret(blockID, offset):
+            return TextPosition(blockID: blockID, offset: offset)
+        case let .range(start, _):
+            return start
+        case let .blockSelection(ids):
+            guard let first = ids.sorted(by: { $0.rawValue < $1.rawValue }).first else { return nil }
+            return TextPosition(blockID: first, offset: 0)
+        }
+    }
+
+    private func sectionID(for blockID: BlockID) -> SectionID? {
+        document.sections.first(where: { section in
+            section.blocks.contains(where: { $0.id == blockID })
+        })?.id
     }
 
     private func pureInsertionDelta(from oldText: String, to newText: String) -> (offset: Int, text: String)? {
