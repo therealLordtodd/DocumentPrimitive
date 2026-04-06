@@ -251,6 +251,58 @@ struct DocumentModelTests {
     }
 
     @MainActor
+    @Test func resolveCurrentCommentAdvancesToNextOpenComment() {
+        let state = DocumentEditorState(
+            document: Document(
+                title: "Draft",
+                sections: [
+                    DocumentSection(
+                        id: "section",
+                        blocks: [
+                            Block(id: "first", type: .paragraph, content: .text(.plain("First note"))),
+                            Block(id: "second", type: .paragraph, content: .text(.plain("Second note"))),
+                        ]
+                    ),
+                ]
+            )
+        )
+
+        let firstComment = try! #require(
+            state.addComment(
+                body: "Review first",
+                authorID: "todd",
+                selection: .range(
+                    start: TextPosition(blockID: "first", offset: 0),
+                    end: TextPosition(blockID: "first", offset: 5)
+                )
+            )
+        )
+        let secondComment = try! #require(
+            state.addComment(
+                body: "Review second",
+                authorID: "todd",
+                selection: .range(
+                    start: TextPosition(blockID: "second", offset: 0),
+                    end: TextPosition(blockID: "second", offset: 6)
+                )
+            )
+        )
+
+        state.focusComment(firstComment.id)
+        state.resolveCurrentComment()
+
+        #expect(state.commentStore.comment(for: firstComment.id)?.status == .resolved)
+        #expect(state.commentStore.activeCommentID == secondComment.id)
+        #expect(
+            state.richTextState.selection
+                == .range(
+                    start: TextPosition(blockID: "second", offset: 0),
+                    end: TextPosition(blockID: "second", offset: 6)
+                )
+        )
+    }
+
+    @MainActor
     @Test func trackingRecordsInsertionAndRejectRestoresOriginalText() {
         let tracker = ChangeTracker(
             currentAuthor: TrackChangesPrimitive.AuthorID(rawValue: "todd"),

@@ -98,6 +98,17 @@ extension DocumentEditorState {
         }
     }
 
+    public var currentComment: Comment? {
+        guard let activeCommentID = commentStore.activeCommentID else { return nil }
+        return commentStore.comment(for: activeCommentID)
+    }
+
+    public var currentCommentSummary: String? {
+        guard let currentComment else { return nil }
+        let trimmed = currentComment.body.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? "Untitled comment" : String(trimmed.prefix(40))
+    }
+
     public func focusComment(_ id: CommentID) {
         guard let comment = commentStore.comment(for: id) else { return }
         commentStore.activeCommentID = id
@@ -117,6 +128,54 @@ extension DocumentEditorState {
         default:
             return
         }
+    }
+
+    public func goToNextComment() {
+        let comments = navigableComments
+        guard !comments.isEmpty else { return }
+
+        guard let activeCommentID = commentStore.activeCommentID,
+              let index = comments.firstIndex(where: { $0.id == activeCommentID }),
+              index + 1 < comments.count
+        else {
+            focusComment(comments.first!.id)
+            return
+        }
+
+        focusComment(comments[index + 1].id)
+    }
+
+    public func goToPreviousComment() {
+        let comments = navigableComments
+        guard !comments.isEmpty else { return }
+
+        guard let activeCommentID = commentStore.activeCommentID,
+              let index = comments.firstIndex(where: { $0.id == activeCommentID }),
+              index > 0
+        else {
+            focusComment(comments.last!.id)
+            return
+        }
+
+        focusComment(comments[index - 1].id)
+    }
+
+    public func resolveCurrentComment() {
+        guard let currentComment else { return }
+        let remainingOpen = commentStore.openComments.filter { $0.id != currentComment.id }
+        let successorID = successorCommentID(afterRemoving: currentComment.id, from: remainingOpen)
+
+        commentStore.resolve(currentComment.id)
+        if let successorID {
+            focusComment(successorID)
+        } else {
+            commentStore.activeCommentID = nil
+        }
+    }
+
+    public func reopenCurrentComment() {
+        guard let currentComment else { return }
+        commentStore.reopen(currentComment.id)
     }
 
     func refreshAnchoredStores() {
@@ -229,6 +288,26 @@ extension DocumentEditorState {
         default:
             return nil
         }
+    }
+
+    private var navigableComments: [Comment] {
+        let openComments = commentStore.openComments
+        return openComments.isEmpty ? commentStore.comments : openComments
+    }
+
+    private func successorCommentID(afterRemoving id: CommentID, from comments: [Comment]) -> CommentID? {
+        guard !comments.isEmpty else { return nil }
+        guard let activeCommentID = commentStore.activeCommentID,
+              let currentIndex = comments.firstIndex(where: { $0.id == activeCommentID })
+        else {
+            return comments.first?.id
+        }
+
+        if currentIndex < comments.count {
+            return comments[min(currentIndex, comments.count - 1)].id
+        }
+
+        return comments.last?.id
     }
 
     private func orderedBlockIDs(in ids: Set<BlockID>) -> [BlockID] {

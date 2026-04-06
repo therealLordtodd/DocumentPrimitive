@@ -29,6 +29,32 @@ public struct DocumentToolbar: View {
             )
 
             Menu {
+                if let currentCommentSummary = state.currentCommentSummary {
+                    Section("Current Comment") {
+                        Text(currentCommentSummary)
+
+                        Button("Previous Comment") {
+                            state.goToPreviousComment()
+                        }
+                        .disabled(commentCount == 0)
+
+                        Button("Next Comment") {
+                            state.goToNextComment()
+                        }
+                        .disabled(commentCount == 0)
+
+                        if state.currentComment?.status == .open {
+                            Button("Resolve Comment") {
+                                state.resolveCurrentComment()
+                            }
+                        } else {
+                            Button("Reopen Comment") {
+                                state.reopenCurrentComment()
+                            }
+                        }
+                    }
+                }
+
                 if bookmarkEntries.isEmpty {
                     Text("No bookmarks")
                 } else {
@@ -189,5 +215,9 @@ public struct DocumentToolbar: View {
             let preview = body.isEmpty ? "Untitled comment" : String(body.prefix(36))
             return (comment.id, preview)
         }
+    }
+
+    private var commentCount: Int {
+        state.commentStore.openComments.count
     }
 }
