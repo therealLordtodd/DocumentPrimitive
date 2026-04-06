@@ -579,6 +579,7 @@ public struct PageView: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 Text(verbatim: code)
                     .font(font(for: paragraphStyle, designOverride: .monospaced))
+                    .fontWeight(swiftUIFontWeight(paragraphStyle.fontWeight))
                     .foregroundStyle(paragraphStyle.textColor.swiftUIColor)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(12)
@@ -589,6 +590,7 @@ public struct PageView: View {
             HStack(alignment: .top, spacing: 8) {
                 Text(listPrefix(for: style))
                     .font(font(for: paragraphStyle, weightOverride: .semibold))
+                    .fontWeight(.semibold)
                     .foregroundStyle(paragraphStyle.textColor.swiftUIColor)
                     .frame(width: 20, alignment: .leading)
 
@@ -680,12 +682,12 @@ public struct PageView: View {
         paragraphStyle: ParagraphStyle
     ) -> Text {
         let font = font(for: run, paragraphStyle: paragraphStyle)
+        let fontWeight = run.attributes.bold ? Font.Weight.bold : swiftUIFontWeight(paragraphStyle.fontWeight)
 
-        var text = Text(verbatim: run.text).font(font)
+        var text = Text(verbatim: run.text)
+            .font(font)
+            .fontWeight(fontWeight)
 
-        if run.attributes.bold {
-            text = text.bold()
-        }
         if run.attributes.italic {
             text = text.italic()
         }
