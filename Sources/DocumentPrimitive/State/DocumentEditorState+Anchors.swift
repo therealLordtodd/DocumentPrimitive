@@ -279,7 +279,7 @@ extension DocumentEditorState {
         )
     }
 
-    private func anchoredContentID(for comment: Comment) -> String? {
+    func anchoredContentID(for comment: Comment) -> String? {
         switch comment.anchor.anchorType {
         case TextCommentAnchor.anchorType:
             return try? comment.anchor.resolve(TextCommentAnchor.self).blockID

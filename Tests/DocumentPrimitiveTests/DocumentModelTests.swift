@@ -303,6 +303,94 @@ struct DocumentModelTests {
     }
 
     @MainActor
+    @Test func blockReviewLookupsFilterCommentsAndChangesByAnchoredBlock() {
+        let tracker = ChangeTracker(
+            currentAuthor: TrackChangesPrimitive.AuthorID(rawValue: "todd"),
+            isTracking: true
+        )
+        let state = DocumentEditorState(
+            document: Document(
+                title: "Draft",
+                sections: [
+                    DocumentSection(
+                        id: "section",
+                        blocks: [
+                            Block(id: "first", type: .paragraph, content: .text(.plain("First block"))),
+                            Block(id: "second", type: .paragraph, content: .text(.plain("Second block"))),
+                        ]
+                    ),
+                ]
+            ),
+            changeTracker: tracker
+        )
+
+        _ = try! #require(
+            state.addComment(
+                body: "Check first",
+                authorID: "todd",
+                selection: .range(
+                    start: TextPosition(blockID: "first", offset: 0),
+                    end: TextPosition(blockID: "first", offset: 5)
+                )
+            )
+        )
+
+        let source = state.dataSource(for: "section")
+        source.updateTextContent(blockID: "second", content: .plain("Second block revised"))
+
+        #expect(state.comments(for: "first").count == 1)
+        #expect(state.comments(for: "second").isEmpty)
+        #expect(state.changes(for: "first").isEmpty)
+        #expect(state.changes(for: "second").count == 1)
+    }
+
+    @MainActor
+    @Test func blockReviewLookupsTrackCurrentCommentAndChangeTargets() {
+        let tracker = ChangeTracker(
+            currentAuthor: TrackChangesPrimitive.AuthorID(rawValue: "todd"),
+            isTracking: true
+        )
+        let state = DocumentEditorState(
+            document: Document(
+                title: "Draft",
+                sections: [
+                    DocumentSection(
+                        id: "section",
+                        blocks: [
+                            Block(id: "first", type: .paragraph, content: .text(.plain("First block"))),
+                            Block(id: "second", type: .paragraph, content: .text(.plain("Second block"))),
+                        ]
+                    ),
+                ]
+            ),
+            changeTracker: tracker
+        )
+
+        let comment = try! #require(
+            state.addComment(
+                body: "Check first",
+                authorID: "todd",
+                selection: .range(
+                    start: TextPosition(blockID: "first", offset: 0),
+                    end: TextPosition(blockID: "first", offset: 5)
+                )
+            )
+        )
+
+        let source = state.dataSource(for: "section")
+        source.updateTextContent(blockID: "second", content: .plain("Second block revised"))
+        let change = try! #require(tracker.changes.first)
+
+        state.focusComment(comment.id)
+        #expect(state.isCurrentComment(on: "first"))
+        #expect(!state.isCurrentComment(on: "second"))
+
+        state.focusChange(change.id)
+        #expect(state.isCurrentTrackedChange(on: "second"))
+        #expect(!state.isCurrentTrackedChange(on: "first"))
+    }
+
+    @MainActor
     @Test func trackingRecordsInsertionAndRejectRestoresOriginalText() {
         let tracker = ChangeTracker(
             currentAuthor: TrackChangesPrimitive.AuthorID(rawValue: "todd"),

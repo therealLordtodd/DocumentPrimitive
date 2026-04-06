@@ -3,6 +3,7 @@ import CommentPrimitive
 import Foundation
 import RichTextPrimitive
 import SwiftUI
+import TrackChangesPrimitive
 #if canImport(AppKit)
 import AppKit
 #elseif canImport(UIKit)
@@ -102,6 +103,10 @@ public struct PageView: View {
         let displayedFootnoteGroups = footnoteDisplayResolver.groups(for: page, document: state.document)
 
         VStack(spacing: 0) {
+            if isActive, hasPageReviewItems {
+                reviewDeck
+            }
+
             Group {
                 if isActive {
                     activePageContent(sectionBlocks: sectionBlocks)
@@ -111,13 +116,18 @@ public struct PageView: View {
                             VStack(alignment: .leading, spacing: 10) {
                                 ForEach(placements) { placement in
                                     if sectionBlocks.indices.contains(placement.blockIndex) {
-                                        preview(
-                                            for: blockFragmentResolver.block(
-                                                for: sectionBlocks[placement.blockIndex],
-                                                placement: placement
+                                        reviewWrappedView(
+                                            for: sectionBlocks[placement.blockIndex].id,
+                                            placement: placement
+                                        ) {
+                                            preview(
+                                                for: blockFragmentResolver.block(
+                                                    for: sectionBlocks[placement.blockIndex],
+                                                    placement: placement
+                                                )
                                             )
-                                        )
-                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                            .frame(maxWidth: .infinity, alignment: .leading)
+                                        }
                                     }
                                 }
                             }
@@ -185,11 +195,16 @@ public struct PageView: View {
                     VStack(alignment: .leading, spacing: 10) {
                         ForEach(placements) { placement in
                             if sectionBlocks.indices.contains(placement.blockIndex) {
-                                activePlacementView(
-                                    for: sectionBlocks[placement.blockIndex],
+                                reviewWrappedView(
+                                    for: sectionBlocks[placement.blockIndex].id,
                                     placement: placement
-                                )
-                                .frame(maxWidth: .infinity, alignment: .leading)
+                                ) {
+                                    activePlacementView(
+                                        for: sectionBlocks[placement.blockIndex],
+                                        placement: placement
+                                    )
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                }
                             }
                         }
                     }
@@ -423,6 +438,97 @@ public struct PageView: View {
             .padding(.horizontal, 6)
             .padding(.vertical, 3)
             .background(.background.opacity(0.92))
+            .clipShape(Capsule())
+    }
+
+    @ViewBuilder
+    private func reviewWrappedView<Content: View>(
+        for blockID: BlockID,
+        placement: BlockFragmentPlacement,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        let blockComments = state.comments(for: blockID)
+        let blockChanges = state.changes(for: blockID)
+        let isCurrentComment = state.isCurrentComment(on: blockID)
+        let isCurrentChange = state.isCurrentTrackedChange(on: blockID)
+        let tint = reviewTint(
+            comments: blockComments,
+            changes: blockChanges,
+            isCurrentComment: isCurrentComment,
+            isCurrentChange: isCurrentChange
+        )
+        let hasReviewMarkers = !blockComments.isEmpty || !blockChanges.isEmpty
+
+        content()
+            .background {
+                if hasReviewMarkers {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(tint.opacity(isCurrentComment || isCurrentChange ? 0.12 : 0.07))
+                        .padding(.horizontal, -6)
+                        .padding(.vertical, -4)
+                }
+            }
+            .overlay {
+                if hasReviewMarkers {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .stroke(
+                            tint.opacity(isCurrentComment || isCurrentChange ? 0.55 : 0.24),
+                            lineWidth: isCurrentComment || isCurrentChange ? 1.6 : 1
+                        )
+                        .padding(.horizontal, -6)
+                        .padding(.vertical, -4)
+                }
+            }
+            .overlay(alignment: .topTrailing) {
+                if hasReviewMarkers, shouldShowReviewBadge(for: placement) {
+                    HStack(spacing: 6) {
+                        if let comment = blockComments.first {
+                            Button {
+                                state.focusComment(comment.id)
+                            } label: {
+                                reviewPill(
+                                    systemImage: isCurrentComment ? "text.bubble.fill" : "text.bubble",
+                                    label: blockComments.count == 1 ? "1" : "\(blockComments.count)",
+                                    tint: .orange
+                                )
+                            }
+                            .buttonStyle(.plain)
+                        }
+
+                        if let change = blockChanges.first {
+                            Button {
+                                state.focusChange(change.id)
+                            } label: {
+                                reviewPill(
+                                    systemImage: changeIcon(for: change),
+                                    label: blockChanges.count == 1 ? "1" : "\(blockChanges.count)",
+                                    tint: changeTint(for: change)
+                                )
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .padding(.top, 6)
+                    .padding(.trailing, 4)
+                }
+            }
+    }
+
+    private func reviewPill(
+        systemImage: String,
+        label: String,
+        tint: Color
+    ) -> some View {
+        Label(label, systemImage: systemImage)
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(tint)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 4)
+            .background(.background.opacity(0.96))
+            .overlay {
+                Capsule()
+                    .stroke(tint.opacity(0.25), lineWidth: 1)
+            }
             .clipShape(Capsule())
     }
 
@@ -772,6 +878,14 @@ public struct PageView: View {
         }
     }
 
+    private var firstPlacementIDByBlockID: [BlockID: UUID] {
+        columnPlacements
+            .flatMap { $0 }
+            .reduce(into: [BlockID: UUID]()) { partialResult, placement in
+                partialResult[placement.blockID] = partialResult[placement.blockID] ?? placement.id
+            }
+    }
+
     private var columnPlacements: [[BlockFragmentPlacement]] {
         let columnCount = max(page.template.columns, 1)
         guard columnCount > 1 else { return [page.blockPlacements] }
@@ -793,6 +907,196 @@ public struct PageView: View {
                 return $0.frame.minY < $1.frame.minY
             }
         }
+    }
+
+    private var hasPageReviewItems: Bool {
+        pageReviewComment != nil || pageReviewChange != nil
+    }
+
+    @ViewBuilder
+    private var reviewDeck: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .top, spacing: 10) {
+                if let comment = pageReviewComment {
+                    commentReviewCard(comment)
+                }
+                if let change = pageReviewChange {
+                    trackedChangeReviewCard(change)
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 10) {
+                if let comment = pageReviewComment {
+                    commentReviewCard(comment)
+                }
+                if let change = pageReviewChange {
+                    trackedChangeReviewCard(change)
+                }
+            }
+        }
+        .padding(.top, 8)
+        .padding(.bottom, 6)
+    }
+
+    private func commentReviewCard(_ comment: Comment) -> some View {
+        let isFocused = state.currentComment?.id == comment.id
+
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Label(comment.status == .open ? "Comment" : "Resolved Comment", systemImage: "text.bubble.fill")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.orange)
+
+                Spacer(minLength: 0)
+
+                if isFocused {
+                    Text("Focused")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.orange)
+                }
+            }
+
+            Text(commentSummary(comment.body))
+                .font(.footnote)
+                .lineLimit(2)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            HStack(spacing: 8) {
+                Button("Open") {
+                    state.focusComment(comment.id)
+                }
+                .buttonStyle(.borderless)
+
+                Button("Prev") {
+                    state.goToPreviousComment()
+                }
+                .buttonStyle(.borderless)
+                .disabled(state.commentStore.comments.isEmpty)
+
+                Button("Next") {
+                    state.goToNextComment()
+                }
+                .buttonStyle(.borderless)
+                .disabled(state.commentStore.comments.isEmpty)
+
+                Spacer(minLength: 0)
+
+                if comment.status == .open {
+                    Button("Resolve") {
+                        state.focusComment(comment.id)
+                        state.resolveCurrentComment()
+                    }
+                    .buttonStyle(.borderless)
+                } else {
+                    Button("Reopen") {
+                        state.focusComment(comment.id)
+                        state.reopenCurrentComment()
+                    }
+                    .buttonStyle(.borderless)
+                }
+            }
+            .font(.caption)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.orange.opacity(0.08))
+        .overlay {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(Color.orange.opacity(0.18), lineWidth: 1)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private func trackedChangeReviewCard(_ change: TrackedChange) -> some View {
+        let tint = changeTint(for: change)
+        let isFocused = state.currentTrackedChange?.id == change.id
+
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Label("Tracked Change", systemImage: changeIcon(for: change))
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(tint)
+
+                Spacer(minLength: 0)
+
+                if isFocused {
+                    Text("Focused")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(tint)
+                }
+            }
+
+            Text(changeSummary(change))
+                .font(.footnote)
+                .lineLimit(2)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            HStack(spacing: 8) {
+                Button("Open") {
+                    state.focusChange(change.id)
+                }
+                .buttonStyle(.borderless)
+
+                Button("Prev") {
+                    state.goToPreviousChange()
+                }
+                .buttonStyle(.borderless)
+                .disabled(state.changeTracker.visibleChanges.isEmpty)
+
+                Button("Next") {
+                    state.goToNextChange()
+                }
+                .buttonStyle(.borderless)
+                .disabled(state.changeTracker.visibleChanges.isEmpty)
+
+                Spacer(minLength: 0)
+
+                Button("Accept") {
+                    state.focusChange(change.id)
+                    state.acceptCurrentChange()
+                }
+                .buttonStyle(.borderless)
+
+                Button("Reject", role: .destructive) {
+                    state.focusChange(change.id)
+                    state.rejectCurrentChange()
+                }
+                .buttonStyle(.borderless)
+            }
+            .font(.caption)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(tint.opacity(0.08))
+        .overlay {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(tint.opacity(0.18), lineWidth: 1)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private var pageReviewComment: Comment? {
+        let comments = state.comments(on: page)
+        guard !comments.isEmpty else { return nil }
+
+        if let current = state.currentComment,
+           comments.contains(where: { $0.id == current.id }) {
+            return current
+        }
+
+        return comments.first(where: { $0.status == .open }) ?? comments.first
+    }
+
+    private var pageReviewChange: TrackedChange? {
+        let changes = state.changes(on: page)
+        guard !changes.isEmpty else { return nil }
+
+        if let current = state.currentTrackedChange,
+           changes.contains(where: { $0.id == current.id }) {
+            return current
+        }
+
+        return changes.first
     }
 
     private var pageAnnotations: [PageAnnotation] {
@@ -876,6 +1180,73 @@ public struct PageView: View {
             .background(annotation.tint.opacity(0.1))
             .clipShape(Capsule())
             .frame(maxWidth: 180, alignment: .trailing)
+    }
+
+    private func shouldShowReviewBadge(for placement: BlockFragmentPlacement) -> Bool {
+        firstPlacementIDByBlockID[placement.blockID] == placement.id
+    }
+
+    private func reviewTint(
+        comments: [Comment],
+        changes: [TrackedChange],
+        isCurrentComment: Bool,
+        isCurrentChange: Bool
+    ) -> Color {
+        if isCurrentComment {
+            return .orange
+        }
+        if isCurrentChange, let currentTrackedChange = state.currentTrackedChange {
+            return changeTint(for: currentTrackedChange)
+        }
+        if !comments.isEmpty && changes.isEmpty {
+            return .orange
+        }
+        if comments.isEmpty, let firstChange = changes.first {
+            return changeTint(for: firstChange)
+        }
+        return .secondary
+    }
+
+    private func changeTint(for change: TrackedChange) -> Color {
+        switch change.type {
+        case .insertion:
+            return .green
+        case .deletion:
+            return .red
+        case .formatChange:
+            return .teal
+        }
+    }
+
+    private func changeIcon(for change: TrackedChange) -> String {
+        switch change.type {
+        case .insertion:
+            return "plus.circle.fill"
+        case .deletion:
+            return "minus.circle.fill"
+        case .formatChange:
+            return "paintbrush.fill"
+        }
+    }
+
+    private func changeSummary(_ change: TrackedChange) -> String {
+        switch change.type {
+        case let .insertion(text):
+            return trimmedPreview(for: text, fallback: "Insertion")
+        case let .deletion(text):
+            return trimmedPreview(for: text, fallback: "Deletion")
+        case .formatChange:
+            return "Formatting change"
+        }
+    }
+
+    private func commentSummary(_ body: String) -> String {
+        trimmedPreview(for: body, fallback: "Untitled comment")
+    }
+
+    private func trimmedPreview(for text: String, fallback: String) -> String {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? fallback : String(trimmed.prefix(72))
     }
 }
 
