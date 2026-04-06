@@ -196,7 +196,7 @@ public struct PageView: View {
             RichTextEditor(
                 state: pageEditorState,
                 dataSource: state.dataSource(for: page),
-                styleSheet: TextStyleSheet.standard
+                styleSheet: documentTextStyleSheet
             )
             .onChange(of: pageEditorState.selection) { _, _ in
                 state.syncCurrentLocation(using: pageEditorState)
@@ -258,7 +258,7 @@ public struct PageView: View {
             RichTextEditor(
                 state: headerFooterState,
                 dataSource: state.headerFooterDataSource(for: page.sectionID, slot: slot),
-                styleSheet: TextStyleSheet.standard
+                styleSheet: documentTextStyleSheet
             )
             .frame(maxWidth: .infinity, minHeight: 22, maxHeight: 28, alignment: alignment)
             .overlay(alignment: alignment) {
@@ -340,7 +340,7 @@ public struct PageView: View {
         RichTextEditor(
             state: editorState,
             dataSource: dataSource,
-            styleSheet: TextStyleSheet.standard
+            styleSheet: documentTextStyleSheet
         )
         .frame(maxWidth: .infinity, minHeight: visibleHeight, maxHeight: visibleHeight, alignment: .topLeading)
         .clipped()
@@ -378,7 +378,7 @@ public struct PageView: View {
         RichTextEditor(
             state: editorState,
             dataSource: dataSource,
-            styleSheet: TextStyleSheet.standard
+            styleSheet: documentTextStyleSheet
         )
         .frame(maxWidth: .infinity, minHeight: fullHeight, maxHeight: fullHeight, alignment: .topLeading)
         .offset(y: -offset)
@@ -1255,6 +1255,10 @@ public struct PageView: View {
 
     private var isReadOnlyMode: Bool {
         readOnlyOverride ?? state.isProjectedReviewMode
+    }
+
+    private var documentTextStyleSheet: TextStyleSheet {
+        displayedDocument.styles.textStyleSheet()
     }
 
     private func annotationBadge(_ annotation: PageAnnotation) -> some View {

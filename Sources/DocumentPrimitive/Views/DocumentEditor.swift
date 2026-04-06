@@ -33,6 +33,7 @@ public struct DocumentEditor: View {
     @ViewBuilder
     private var contentView: some View {
         let projection = state.reviewDisplayProjection
+        let styleSheet = state.document.styles.textStyleSheet()
 
         if projection.isReadOnly {
             PrintPreview(state: state)
@@ -48,7 +49,7 @@ public struct DocumentEditor: View {
                             RichTextEditor(
                                 state: sectionEditorState,
                                 dataSource: state.dataSource(for: section.id),
-                                styleSheet: TextStyleSheet.standard
+                                styleSheet: styleSheet
                             )
                             .frame(minHeight: 220)
                             .padding()

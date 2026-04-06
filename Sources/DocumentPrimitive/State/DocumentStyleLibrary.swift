@@ -70,3 +70,41 @@ public struct DocumentStyleLibrary: Codable, Sendable, Equatable {
         )
     }
 }
+
+@MainActor
+extension DocumentStyleLibrary {
+    public func textStyleSheet() -> TextStyleSheet {
+        let defaultStyle = paragraphStyles["Normal"]
+            ?? paragraphStyles["Body Text"]
+            ?? ParagraphStyle()
+
+        let headingStyles = Dictionary(uniqueKeysWithValues: (1...6).compactMap { level in
+            paragraphStyles["Heading \(level)"].map { (level, $0) }
+        })
+
+        let blockQuoteStyle = paragraphStyles["Block Quote"] ?? defaultStyle
+        let codeBlockStyle = paragraphStyles["Code"] ?? ParagraphStyle(fontFamily: "Menlo", fontSize: 13)
+        let listParagraphStyle = paragraphStyles["List Paragraph"] ?? defaultStyle
+        let customStyles = paragraphStyles.filter { name, _ in
+            !(name == "Normal"
+                || name == "Body Text"
+                || name == "Block Quote"
+                || name == "Code"
+                || name == "List Paragraph"
+                || name.hasPrefix("Heading "))
+        }
+
+        return TextStyleSheet(
+            defaultStyle: defaultStyle,
+            headingStyles: headingStyles,
+            blockQuoteStyle: blockQuoteStyle,
+            codeBlockStyle: codeBlockStyle,
+            listStyles: [
+                .bullet: listParagraphStyle,
+                .numbered: listParagraphStyle,
+                .checklist: listParagraphStyle,
+            ],
+            customStyles: customStyles
+        )
+    }
+}
