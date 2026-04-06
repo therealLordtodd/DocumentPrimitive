@@ -18,8 +18,54 @@ public struct DocumentToolbar: View {
 
             Toggle("Ruler", isOn: $state.showRuler)
             Toggle("Formatting", isOn: $state.showFormatting)
+            Toggle(
+                "Track",
+                isOn: Binding(
+                    get: { state.changeTracker.isTracking },
+                    set: { state.changeTracker.isTracking = $0 }
+                )
+            )
 
             Spacer()
+
+            HStack(spacing: 8) {
+                Button {
+                    state.goToPreviousChange()
+                } label: {
+                    Image(systemName: "arrow.up.circle")
+                }
+                .buttonStyle(.borderless)
+                .disabled(changeCount == 0)
+
+                Text(changeCountLabel)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(minWidth: 72, alignment: .center)
+
+                Button {
+                    state.goToNextChange()
+                } label: {
+                    Image(systemName: "arrow.down.circle")
+                }
+                .buttonStyle(.borderless)
+                .disabled(changeCount == 0)
+
+                Menu {
+                    Button("Accept All Changes") {
+                        state.acceptAllChanges()
+                    }
+                    .disabled(changeCount == 0)
+
+                    Button("Reject All Changes", role: .destructive) {
+                        state.rejectAllChanges()
+                    }
+                    .disabled(changeCount == 0)
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                }
+                .menuStyle(.borderlessButton)
+                .disabled(changeCount == 0)
+            }
 
             HStack(spacing: 8) {
                 Button {
@@ -45,5 +91,20 @@ public struct DocumentToolbar: View {
         }
         .padding(.horizontal)
         .padding(.vertical, 8)
+    }
+
+    private var changeCount: Int {
+        state.changeTracker.visibleChanges.count
+    }
+
+    private var changeCountLabel: String {
+        if changeCount == 0 {
+            return "No Changes"
+        }
+        if let currentTrackedChangeID = state.currentTrackedChangeID,
+           let index = state.changeTracker.visibleChanges.firstIndex(where: { $0.id == currentTrackedChangeID }) {
+            return "Change \(index + 1)/\(changeCount)"
+        }
+        return changeCount == 1 ? "1 Change" : "\(changeCount) Changes"
     }
 }

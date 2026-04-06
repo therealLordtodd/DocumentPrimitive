@@ -324,6 +324,42 @@ struct DocumentModelTests {
     }
 
     @MainActor
+    @Test func rejectAllChangesRestoresDocumentAndClearsNavigationState() {
+        let tracker = ChangeTracker(
+            currentAuthor: TrackChangesPrimitive.AuthorID(rawValue: "todd"),
+            isTracking: true
+        )
+        let state = DocumentEditorState(
+            document: Document(
+                title: "Draft",
+                sections: [
+                    DocumentSection(
+                        id: "section",
+                        blocks: [Block(id: "body", type: .paragraph, content: .text(.plain("Hello")))]
+                    ),
+                ]
+            ),
+            changeTracker: tracker
+        )
+        let source = state.dataSource(for: "section")
+
+        source.updateTextContent(blockID: "body", content: .plain("Hello world"))
+        source.updateTextContent(
+            blockID: "body",
+            content: TextContent(runs: [TextRun(text: "Hello world", attributes: TextAttributes(bold: true))])
+        )
+        state.goToNextChange()
+
+        state.rejectAllChanges()
+
+        let restoredBlock = try! #require(state.document.section("section")?.blocks.first)
+        #expect(restoredBlock.content.textContent?.plainText == "Hello")
+        #expect(restoredBlock.content.textContent?.runs.first?.attributes == .plain)
+        #expect(tracker.changes.isEmpty)
+        #expect(state.currentTrackedChangeID == nil)
+    }
+
+    @MainActor
     @Test func sectionAndPageDataSourcesBroadcastSharedMutations() {
         let document = Document(
             title: "Draft",
