@@ -231,11 +231,11 @@ public final class DocumentEditorState {
         updateSectionBlocks(updated, for: sectionID)
     }
 
-    fileprivate func blocks(for sectionID: SectionID) -> [Block] {
+    func blocks(for sectionID: SectionID) -> [Block] {
         document.section(sectionID)?.blocks ?? []
     }
 
-    fileprivate func updateSectionBlocks(_ blocks: [Block], for sectionID: SectionID) {
+    func updateSectionBlocks(_ blocks: [Block], for sectionID: SectionID) {
         guard let index = document.sectionIndex(sectionID) else { return }
         document.sections[index].blocks = blocks
         layoutEngine.document = document
@@ -866,18 +866,22 @@ public final class SectionDataSource: RichTextDataSource {
     }
 
     public func insertBlocks(_ blocks: [Block], at index: Int) {
-        var updated = self.blocks
+        let beforeBlocks = self.blocks
+        var updated = beforeBlocks
         let insertionIndex = min(max(index, 0), updated.count)
         updated.insert(contentsOf: blocks, at: insertionIndex)
+        editorState.recordStructuralTrackedChanges(in: sectionID, before: beforeBlocks, after: updated)
         editorState.updateSectionBlocks(updated, for: sectionID)
         notify(.blocksInserted(indices: IndexSet(insertionIndex..<(insertionIndex + blocks.count))))
     }
 
     public func deleteBlocks(at indices: IndexSet) {
-        var updated = blocks
+        let beforeBlocks = blocks
+        var updated = beforeBlocks
         for index in indices.sorted(by: >) where updated.indices.contains(index) {
             updated.remove(at: index)
         }
+        editorState.recordStructuralTrackedChanges(in: sectionID, before: beforeBlocks, after: updated)
         editorState.updateSectionBlocks(updated, for: sectionID)
         notify(.blocksDeleted(indices: indices))
     }
@@ -982,15 +986,18 @@ public final class PageScopedDataSource: RichTextDataSource {
     }
 
     public func insertBlocks(_ blocks: [Block], at index: Int) {
-        var updated = editorState.blocks(for: page.sectionID)
+        let beforeBlocks = editorState.blocks(for: page.sectionID)
+        var updated = beforeBlocks
         let insertionIndex = insertionSectionIndex(forLocalIndex: index, in: updated)
         updated.insert(contentsOf: blocks, at: insertionIndex)
+        editorState.recordStructuralTrackedChanges(in: page.sectionID, before: beforeBlocks, after: updated)
         editorState.updateSectionBlocks(updated, for: page.sectionID)
         notify(.blocksInserted(indices: IndexSet(index..<(index + blocks.count))))
     }
 
     public func deleteBlocks(at indices: IndexSet) {
-        var updated = editorState.blocks(for: page.sectionID)
+        let beforeBlocks = editorState.blocks(for: page.sectionID)
+        var updated = beforeBlocks
         let sectionIndices = indices
             .compactMap { localIndex in sectionIndex(forLocalIndex: localIndex) }
             .sorted(by: >)
@@ -999,6 +1006,7 @@ public final class PageScopedDataSource: RichTextDataSource {
             updated.remove(at: index)
         }
 
+        editorState.recordStructuralTrackedChanges(in: page.sectionID, before: beforeBlocks, after: updated)
         editorState.updateSectionBlocks(updated, for: page.sectionID)
         notify(.blocksDeleted(indices: indices))
     }
@@ -1163,7 +1171,7 @@ public final class BlockDataSource: RichTextDataSource {
 
     public func insertBlocks(_ blocks: [Block], at index: Int) {
         _ = index
-        if let nextFocusedBlockID = replaceCurrentBlock(with: blocks) {
+        if let nextFocusedBlockID = replaceCurrentBlock(with: blocks, recordStructuralChanges: true) {
             let nextEditorState = editorState.richTextState(forBlock: nextFocusedBlockID, in: sectionID)
             nextEditorState.selection = .caret(nextFocusedBlockID, offset: 0)
             nextEditorState.focusedBlockID = nextFocusedBlockID
@@ -1176,7 +1184,8 @@ public final class BlockDataSource: RichTextDataSource {
 
     public func deleteBlocks(at indices: IndexSet) {
         guard indices.contains(0) else { return }
-        var updated = editorState.blocks(for: sectionID)
+        let beforeBlocks = editorState.blocks(for: sectionID)
+        var updated = beforeBlocks
         guard let currentIndex = updated.firstIndex(where: { $0.id == blockID }) else { return }
         let currentBlock = updated[currentIndex]
         updated.remove(at: currentIndex)
@@ -1196,6 +1205,7 @@ public final class BlockDataSource: RichTextDataSource {
             nextFocusedBlockID = updated[nextIndex].id
         }
 
+        editorState.recordStructuralTrackedChanges(in: sectionID, before: beforeBlocks, after: updated)
         editorState.updateSectionBlocks(updated, for: sectionID)
         let nextEditorState = editorState.richTextState(forBlock: nextFocusedBlockID, in: sectionID)
         nextEditorState.selection = .caret(nextFocusedBlockID, offset: 0)
@@ -1264,10 +1274,14 @@ public final class BlockDataSource: RichTextDataSource {
         observers.removeValue(forKey: id)
     }
 
-    private func replaceCurrentBlock(with blocks: [Block]) -> BlockID? {
+    private func replaceCurrentBlock(
+        with blocks: [Block],
+        recordStructuralChanges: Bool = false
+    ) -> BlockID? {
         guard !blocks.isEmpty else { return nil }
 
-        var updated = editorState.blocks(for: sectionID)
+        let beforeBlocks = editorState.blocks(for: sectionID)
+        var updated = beforeBlocks
         if let currentIndex = updated.firstIndex(where: { $0.id == blockID }) {
             let currentBlock = updated[currentIndex]
             let replacementBlocks = blocks.enumerated().map { offset, block -> Block in
@@ -1284,12 +1298,18 @@ public final class BlockDataSource: RichTextDataSource {
 
             updated.remove(at: currentIndex)
             updated.insert(contentsOf: replacementBlocks, at: currentIndex)
+            if recordStructuralChanges {
+                editorState.recordStructuralTrackedChanges(in: sectionID, before: beforeBlocks, after: updated)
+            }
             editorState.updateSectionBlocks(updated, for: sectionID)
             return replacementBlocks.dropFirst().first?.id
         }
 
         let insertionIndex = min(max(0, updated.count), updated.count)
         updated.insert(contentsOf: blocks, at: insertionIndex)
+        if recordStructuralChanges {
+            editorState.recordStructuralTrackedChanges(in: sectionID, before: beforeBlocks, after: updated)
+        }
         editorState.updateSectionBlocks(updated, for: sectionID)
         return blocks.first?.id
     }
@@ -1346,7 +1366,7 @@ public final class FragmentDataSource: RichTextDataSource {
         _ = index
         let originalBlock = pendingDeletionOriginalBlock ?? editorState.block(in: sectionID, id: placement.blockID)
         pendingDeletionOriginalBlock = nil
-        applyReplacement(blocks, to: originalBlock)
+        applyReplacement(blocks, to: originalBlock, recordStructuralChanges: true)
         notify(.batchUpdate)
     }
 
@@ -1407,10 +1427,15 @@ public final class FragmentDataSource: RichTextDataSource {
             in: originalBlock,
             with: [replacement]
         )
-        if mergedBlocks.count == 1, let mergedBlock = mergedBlocks.first, mergedBlock.id == originalBlock.id {
+        let recordsStructuralChanges = !(mergedBlocks.count == 1 && mergedBlocks.first?.id == originalBlock.id)
+        if !recordsStructuralChanges, let mergedBlock = mergedBlocks.first {
             editorState.recordTrackedChange(in: sectionID, before: originalBlock, after: mergedBlock)
         }
-        replaceOriginalBlock(originalBlockID: originalBlock.id, with: mergedBlocks)
+        replaceOriginalBlock(
+            originalBlockID: originalBlock.id,
+            with: mergedBlocks,
+            recordStructuralChanges: recordsStructuralChanges
+        )
         notify(.textUpdated(blockID: blockID))
     }
 
@@ -1428,10 +1453,15 @@ public final class FragmentDataSource: RichTextDataSource {
             in: originalBlock,
             with: [replacement]
         )
-        if mergedBlocks.count == 1, let mergedBlock = mergedBlocks.first, mergedBlock.id == originalBlock.id {
+        let recordsStructuralChanges = !(mergedBlocks.count == 1 && mergedBlocks.first?.id == originalBlock.id)
+        if !recordsStructuralChanges, let mergedBlock = mergedBlocks.first {
             editorState.recordTrackedChange(in: sectionID, before: originalBlock, after: mergedBlock)
         }
-        replaceOriginalBlock(originalBlockID: originalBlock.id, with: mergedBlocks)
+        replaceOriginalBlock(
+            originalBlockID: originalBlock.id,
+            with: mergedBlocks,
+            recordStructuralChanges: recordsStructuralChanges
+        )
         notify(.typeChanged(blockID: blockID))
     }
 
@@ -1448,25 +1478,41 @@ public final class FragmentDataSource: RichTextDataSource {
     private func commitPendingDeletionIfNeeded() {
         guard let originalBlock = pendingDeletionOriginalBlock else { return }
         pendingDeletionOriginalBlock = nil
-        applyReplacement([], to: originalBlock)
+        applyReplacement([], to: originalBlock, recordStructuralChanges: true)
         notify(.batchUpdate)
     }
 
-    private func applyReplacement(_ replacementBlocks: [Block], to originalBlock: Block?) {
+    private func applyReplacement(
+        _ replacementBlocks: [Block],
+        to originalBlock: Block?,
+        recordStructuralChanges: Bool = false
+    ) {
         guard let originalBlock else { return }
         let updatedBlocks = resolver.mergedBlocks(
             replacing: placement,
             in: originalBlock,
             with: replacementBlocks
         )
-        replaceOriginalBlock(originalBlockID: originalBlock.id, with: updatedBlocks)
+        replaceOriginalBlock(
+            originalBlockID: originalBlock.id,
+            with: updatedBlocks,
+            recordStructuralChanges: recordStructuralChanges
+        )
     }
 
-    private func replaceOriginalBlock(originalBlockID: BlockID, with replacementBlocks: [Block]) {
-        var updated = editorState.blocks(for: sectionID)
+    private func replaceOriginalBlock(
+        originalBlockID: BlockID,
+        with replacementBlocks: [Block],
+        recordStructuralChanges: Bool = false
+    ) {
+        let beforeBlocks = editorState.blocks(for: sectionID)
+        var updated = beforeBlocks
         guard let currentIndex = updated.firstIndex(where: { $0.id == originalBlockID }) else { return }
         updated.remove(at: currentIndex)
         updated.insert(contentsOf: replacementBlocks, at: currentIndex)
+        if recordStructuralChanges {
+            editorState.recordStructuralTrackedChanges(in: sectionID, before: beforeBlocks, after: updated)
+        }
         editorState.updateSectionBlocks(updated, for: sectionID)
     }
 

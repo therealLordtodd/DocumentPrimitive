@@ -1305,6 +1305,27 @@ public struct PageView: View {
     }
 
     private func changeSummary(_ change: TrackedChange) -> String {
+        if let context = state.trackedChangeContexts[change.id] {
+            switch context.operation {
+            case let .insert(blocks, _):
+                return structuralReviewSummary(
+                    count: blocks.count,
+                    singular: "Inserted block",
+                    plural: "Inserted blocks",
+                    preview: changePreviewText(change)
+                )
+            case let .delete(blocks, _):
+                return structuralReviewSummary(
+                    count: blocks.count,
+                    singular: "Deleted block",
+                    plural: "Deleted blocks",
+                    preview: changePreviewText(change)
+                )
+            case .replace:
+                break
+            }
+        }
+
         switch change.type {
         case let .insertion(text):
             return trimmedPreview(for: text, fallback: "Insertion")
@@ -1322,6 +1343,26 @@ public struct PageView: View {
     private func trimmedPreview(for text: String, fallback: String) -> String {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? fallback : String(trimmed.prefix(72))
+    }
+
+    private func changePreviewText(_ change: TrackedChange) -> String {
+        switch change.type {
+        case let .insertion(text), let .deletion(text):
+            return text.trimmingCharacters(in: .whitespacesAndNewlines)
+        case .formatChange:
+            return ""
+        }
+    }
+
+    private func structuralReviewSummary(
+        count: Int,
+        singular: String,
+        plural: String,
+        preview: String
+    ) -> String {
+        let title = count == 1 ? singular : "\(count) \(plural.lowercased())"
+        guard !preview.isEmpty else { return title }
+        return "\(title): \(String(preview.prefix(72)))"
     }
 
     private func commentBodyBinding(for comment: Comment) -> Binding<String> {

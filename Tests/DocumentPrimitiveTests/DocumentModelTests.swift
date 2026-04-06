@@ -459,6 +459,81 @@ struct DocumentModelTests {
     }
 
     @MainActor
+    @Test func structuralInsertionTrackingRejectRemovesInsertedBlocks() {
+        let tracker = ChangeTracker(
+            currentAuthor: TrackChangesPrimitive.AuthorID(rawValue: "todd"),
+            isTracking: true
+        )
+        let state = DocumentEditorState(
+            document: Document(
+                title: "Draft",
+                sections: [
+                    DocumentSection(
+                        id: "section",
+                        blocks: [Block(id: "body", type: .paragraph, content: .text(.plain("Hello")))]
+                    ),
+                ]
+            ),
+            changeTracker: tracker
+        )
+
+        let source = state.dataSource(for: "section")
+        source.insertBlocks(
+            [Block(id: "inserted", type: .paragraph, content: .text(.plain("Inserted block")))],
+            at: 1
+        )
+
+        let change = try! #require(tracker.changes.first)
+        #expect(change.type == .insertion(text: "Inserted block"))
+
+        state.focusChange(change.id)
+        #expect(state.currentTrackedChangeSummary == "Inserted block: Inserted block")
+
+        state.rejectChange(change.id)
+
+        #expect(state.document.section("section")?.blocks.map(\.id) == ["body"])
+        #expect(tracker.changes.isEmpty)
+    }
+
+    @MainActor
+    @Test func structuralDeletionTrackingRejectRestoresDeletedBlocks() {
+        let tracker = ChangeTracker(
+            currentAuthor: TrackChangesPrimitive.AuthorID(rawValue: "todd"),
+            isTracking: true
+        )
+        let state = DocumentEditorState(
+            document: Document(
+                title: "Draft",
+                sections: [
+                    DocumentSection(
+                        id: "section",
+                        blocks: [
+                            Block(id: "first", type: .paragraph, content: .text(.plain("First block"))),
+                            Block(id: "second", type: .paragraph, content: .text(.plain("Second block"))),
+                        ]
+                    ),
+                ]
+            ),
+            changeTracker: tracker
+        )
+
+        let source = state.dataSource(for: "section")
+        source.deleteBlocks(at: IndexSet(integer: 0))
+
+        let change = try! #require(tracker.changes.first)
+        #expect(change.type == .deletion(text: "First block"))
+
+        state.focusChange(change.id)
+        #expect(state.currentTrackedChangeSummary == "Deleted block: First block")
+        #expect(state.richTextState.focusedBlockID == "second")
+
+        state.rejectChange(change.id)
+
+        #expect(state.document.section("section")?.blocks.map(\.id) == ["first", "second"])
+        #expect(tracker.changes.isEmpty)
+    }
+
+    @MainActor
     @Test func pageScopedReviewNavigationTargetsVisibleAnchors() {
         let tracker = ChangeTracker(
             currentAuthor: TrackChangesPrimitive.AuthorID(rawValue: "todd"),
