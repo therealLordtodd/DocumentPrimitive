@@ -178,6 +178,30 @@ extension DocumentEditorState {
         commentStore.reopen(currentComment.id)
     }
 
+    public func updateCurrentComment(body: String) {
+        guard let currentComment else { return }
+        updateComment(currentComment.id, body: body)
+    }
+
+    public func updateComment(_ id: CommentID, body: String) {
+        commentStore.update(id, body: body)
+    }
+
+    public func replyToCurrentComment(body: String, authorID: String) {
+        guard let currentComment else { return }
+        reply(to: currentComment.id, body: body, authorID: authorID)
+    }
+
+    public func reply(to id: CommentID, body: String, authorID: String) {
+        let trimmed = body.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+
+        commentStore.reply(
+            to: id,
+            reply: CommentReply(author: CommentPrimitive.AuthorID(rawValue: authorID), body: trimmed)
+        )
+    }
+
     func refreshAnchoredStores() {
         bookmarkStore.positionResolver = bookmarkPositionResolver()
         bookmarkStore.regenerate(from: autoBookmarkItems())

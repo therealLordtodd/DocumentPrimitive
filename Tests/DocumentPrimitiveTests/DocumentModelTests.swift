@@ -391,6 +391,133 @@ struct DocumentModelTests {
     }
 
     @MainActor
+    @Test func updateCurrentCommentMutatesStoredBody() {
+        let state = DocumentEditorState(
+            document: Document(
+                title: "Draft",
+                sections: [
+                    DocumentSection(
+                        id: "section",
+                        blocks: [
+                            Block(id: "body", type: .paragraph, content: .text(.plain("Hello world"))),
+                        ]
+                    ),
+                ]
+            )
+        )
+
+        let comment = try! #require(
+            state.addComment(
+                body: "Original",
+                authorID: "todd",
+                selection: .range(
+                    start: TextPosition(blockID: "body", offset: 0),
+                    end: TextPosition(blockID: "body", offset: 5)
+                )
+            )
+        )
+
+        state.focusComment(comment.id)
+        state.updateCurrentComment(body: "Updated body")
+
+        #expect(state.commentStore.comment(for: comment.id)?.body == "Updated body")
+    }
+
+    @MainActor
+    @Test func replyToCurrentCommentAddsReplyAndTrimsWhitespace() {
+        let state = DocumentEditorState(
+            document: Document(
+                title: "Draft",
+                sections: [
+                    DocumentSection(
+                        id: "section",
+                        blocks: [
+                            Block(id: "body", type: .paragraph, content: .text(.plain("Hello world"))),
+                        ]
+                    ),
+                ]
+            )
+        )
+
+        let comment = try! #require(
+            state.addComment(
+                body: "Original",
+                authorID: "todd",
+                selection: .range(
+                    start: TextPosition(blockID: "body", offset: 0),
+                    end: TextPosition(blockID: "body", offset: 5)
+                )
+            )
+        )
+
+        state.focusComment(comment.id)
+        state.replyToCurrentComment(body: "  Sounds good  ", authorID: "reviewer")
+
+        #expect(state.commentStore.comment(for: comment.id)?.replies.count == 1)
+        #expect(state.commentStore.comment(for: comment.id)?.replies.first?.body == "Sounds good")
+        #expect(state.commentStore.comment(for: comment.id)?.replies.first?.author == "reviewer")
+    }
+
+    @MainActor
+    @Test func pageScopedReviewNavigationTargetsVisibleAnchors() {
+        let tracker = ChangeTracker(
+            currentAuthor: TrackChangesPrimitive.AuthorID(rawValue: "todd"),
+            isTracking: true
+        )
+        let state = DocumentEditorState(
+            document: Document(
+                title: "Draft",
+                sections: [
+                    DocumentSection(
+                        id: "section",
+                        blocks: [
+                            Block(id: "first", type: .paragraph, content: .text(.plain("First"))),
+                            Block(id: "second", type: .paragraph, content: .text(.plain("Second"))),
+                        ]
+                    ),
+                ]
+            ),
+            changeTracker: tracker
+        )
+
+        state.addBookmark(named: "Target", for: "first", offset: 1)
+        let comment = try! #require(
+            state.addComment(
+                body: "Check first",
+                authorID: "todd",
+                selection: .range(
+                    start: TextPosition(blockID: "first", offset: 0),
+                    end: TextPosition(blockID: "first", offset: 5)
+                )
+            )
+        )
+        let source = state.dataSource(for: "section")
+        source.updateTextContent(blockID: "second", content: .plain("Second revised"))
+        let change = try! #require(tracker.changes.first)
+
+        let firstPage = ComputedPage(
+            sectionID: "section",
+            pageNumber: 1,
+            blockRanges: [BlockRange(startIndex: 0, endIndex: 0)]
+        )
+        let secondPage = ComputedPage(
+            sectionID: "section",
+            pageNumber: 2,
+            blockRanges: [BlockRange(startIndex: 1, endIndex: 1)]
+        )
+
+        state.focusFirstBookmark(on: firstPage)
+        #expect(state.richTextState.selection == .caret("first", offset: 1))
+
+        state.focusFirstComment(on: firstPage)
+        #expect(state.commentStore.activeCommentID == comment.id)
+
+        state.focusFirstChange(on: secondPage)
+        #expect(state.currentTrackedChangeID == change.id)
+        #expect(state.richTextState.selection == .caret("second", offset: 6))
+    }
+
+    @MainActor
     @Test func trackingRecordsInsertionAndRejectRestoresOriginalText() {
         let tracker = ChangeTracker(
             currentAuthor: TrackChangesPrimitive.AuthorID(rawValue: "todd"),

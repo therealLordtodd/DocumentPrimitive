@@ -12,6 +12,8 @@ import UIKit
 
 public struct PageView: View {
     @Bindable private var state: DocumentEditorState
+    @State private var commentDrafts: [CommentID: String] = [:]
+    @State private var replyDrafts: [CommentID: String] = [:]
     @Environment(\.pageInlineBlockRenderer) private var pageInlineBlockRenderer
     private let page: ComputedPage
     private let fieldCodeResolver = FieldCodeResolver()
@@ -940,6 +942,8 @@ public struct PageView: View {
 
     private func commentReviewCard(_ comment: Comment) -> some View {
         let isFocused = state.currentComment?.id == comment.id
+        let bodyDraft = commentBodyBinding(for: comment)
+        let replyDraft = replyBodyBinding(for: comment)
 
         return VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
@@ -956,10 +960,63 @@ public struct PageView: View {
                 }
             }
 
-            Text(commentSummary(comment.body))
-                .font(.footnote)
-                .lineLimit(2)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            TextField("Edit comment", text: bodyDraft, axis: .vertical)
+                .textFieldStyle(.roundedBorder)
+                .lineLimit(2 ... 4)
+
+            if commentBodyDraft(for: comment) != comment.body {
+                HStack(spacing: 8) {
+                    Button("Save") {
+                        saveCommentEdits(comment)
+                    }
+                    .buttonStyle(.borderless)
+
+                    Button("Reset") {
+                        discardCommentEdits(comment)
+                    }
+                    .buttonStyle(.borderless)
+
+                    Spacer(minLength: 0)
+                }
+                .font(.caption)
+            }
+
+            if !comment.replies.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(comment.replies) { reply in
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(reply.author.rawValue)
+                                .font(.caption2.weight(.semibold))
+                                .foregroundStyle(.secondary)
+
+                            Text(reply.body)
+                                .font(.caption)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .padding(8)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Color.secondary.opacity(0.06))
+                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    }
+                }
+            }
+
+            if comment.status == .open {
+                TextField("Reply", text: replyDraft, axis: .vertical)
+                    .textFieldStyle(.roundedBorder)
+                    .lineLimit(1 ... 3)
+
+                HStack(spacing: 8) {
+                    Button("Reply") {
+                        sendReply(for: comment)
+                    }
+                    .buttonStyle(.borderless)
+                    .disabled(replyBodyDraft(for: comment).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
+                    Spacer(minLength: 0)
+                }
+                .font(.caption)
+            }
 
             HStack(spacing: 8) {
                 Button("Open") {
@@ -1100,25 +1157,27 @@ public struct PageView: View {
     }
 
     private var pageAnnotations: [PageAnnotation] {
-        let bookmarks = state.bookmarks(on: page).map {
+        let bookmarks = state.bookmarks(on: page).map { bookmark in
             PageAnnotation(
-                title: $0.name,
+                title: bookmark.name,
                 icon: "bookmark.fill",
-                tint: .blue
+                tint: .blue,
+                action: { state.focusBookmark(bookmark.id) }
             )
         }
-        let comments = state.comments(on: page)
+        let commentAnnotations = state.comments(on: page)
             .filter { $0.status == .open }
-            .map {
+            .map { comment in
                 PageAnnotation(
-                    title: $0.body,
+                    title: comment.body,
                     icon: "text.bubble.fill",
-                    tint: .orange
+                    tint: .orange,
+                    action: { state.focusComment(comment.id) }
                 )
             }
         let changeAnnotations = trackedChangeAnnotations
 
-        return Array((bookmarks + comments + changeAnnotations).prefix(6))
+        return Array((bookmarks + commentAnnotations + changeAnnotations).prefix(6))
     }
 
     private var trackedChangeAnnotations: [PageAnnotation] {
@@ -1144,7 +1203,8 @@ public struct PageView: View {
                 PageAnnotation(
                     title: insertions == 1 ? "1 insertion" : "\(insertions) insertions",
                     icon: "plus.circle.fill",
-                    tint: .green
+                    tint: .green,
+                    action: { state.focusFirstChange(on: page) }
                 )
             )
         }
@@ -1153,7 +1213,8 @@ public struct PageView: View {
                 PageAnnotation(
                     title: deletions == 1 ? "1 deletion" : "\(deletions) deletions",
                     icon: "minus.circle.fill",
-                    tint: .red
+                    tint: .red,
+                    action: { state.focusFirstChange(on: page) }
                 )
             )
         }
@@ -1162,7 +1223,8 @@ public struct PageView: View {
                 PageAnnotation(
                     title: formatChanges == 1 ? "1 format change" : "\(formatChanges) format changes",
                     icon: "paintbrush.fill",
-                    tint: .teal
+                    tint: .teal,
+                    action: { state.focusFirstChange(on: page) }
                 )
             )
         }
@@ -1171,6 +1233,20 @@ public struct PageView: View {
     }
 
     private func annotationBadge(_ annotation: PageAnnotation) -> some View {
+        Group {
+            if let action = annotation.action {
+                Button(action: action) {
+                    annotationBadgeLabel(annotation)
+                }
+                .buttonStyle(.plain)
+            } else {
+                annotationBadgeLabel(annotation)
+            }
+        }
+        .frame(maxWidth: 180, alignment: .trailing)
+    }
+
+    private func annotationBadgeLabel(_ annotation: PageAnnotation) -> some View {
         Label(annotation.title, systemImage: annotation.icon)
             .font(.caption2.weight(.medium))
             .foregroundStyle(annotation.tint)
@@ -1179,7 +1255,6 @@ public struct PageView: View {
             .padding(.vertical, 5)
             .background(annotation.tint.opacity(0.1))
             .clipShape(Capsule())
-            .frame(maxWidth: 180, alignment: .trailing)
     }
 
     private func shouldShowReviewBadge(for placement: BlockFragmentPlacement) -> Bool {
@@ -1248,6 +1323,58 @@ public struct PageView: View {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? fallback : String(trimmed.prefix(72))
     }
+
+    private func commentBodyBinding(for comment: Comment) -> Binding<String> {
+        Binding(
+            get: { commentBodyDraft(for: comment) },
+            set: { commentDrafts[comment.id] = $0 }
+        )
+    }
+
+    private func replyBodyBinding(for comment: Comment) -> Binding<String> {
+        Binding(
+            get: { replyBodyDraft(for: comment) },
+            set: { replyDrafts[comment.id] = $0 }
+        )
+    }
+
+    private func commentBodyDraft(for comment: Comment) -> String {
+        commentDrafts[comment.id] ?? comment.body
+    }
+
+    private func replyBodyDraft(for comment: Comment) -> String {
+        replyDrafts[comment.id] ?? ""
+    }
+
+    private func discardCommentEdits(_ comment: Comment) {
+        commentDrafts.removeValue(forKey: comment.id)
+    }
+
+    private func saveCommentEdits(_ comment: Comment) {
+        let draft = commentBodyDraft(for: comment)
+        state.updateComment(comment.id, body: draft)
+        commentDrafts[comment.id] = draft
+    }
+
+    private func sendReply(for comment: Comment) {
+        let draft = replyBodyDraft(for: comment)
+        state.reply(to: comment.id, body: draft, authorID: reviewAuthorID)
+        replyDrafts[comment.id] = ""
+    }
+
+    private var reviewAuthorID: String {
+        let trackerAuthor = state.changeTracker.currentAuthor.rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trackerAuthor.isEmpty {
+            return trackerAuthor
+        }
+
+        if let documentAuthor = state.document.settings.author?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !documentAuthor.isEmpty {
+            return documentAuthor
+        }
+
+        return "system"
+    }
 }
 
 private struct PageAnnotation: Identifiable {
@@ -1255,4 +1382,5 @@ private struct PageAnnotation: Identifiable {
     let title: String
     let icon: String
     let tint: Color
+    let action: (() -> Void)?
 }
