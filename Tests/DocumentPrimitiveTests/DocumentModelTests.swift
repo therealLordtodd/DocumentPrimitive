@@ -579,6 +579,45 @@ struct DocumentModelTests {
     }
 
     @MainActor
+    @Test func originalReviewProjectionReconstructsPreChangeDocument() {
+        let tracker = ChangeTracker(
+            currentAuthor: TrackChangesPrimitive.AuthorID(rawValue: "todd"),
+            isTracking: true
+        )
+        let state = DocumentEditorState(
+            document: Document(
+                title: "Draft",
+                sections: [
+                    DocumentSection(
+                        id: "section",
+                        blocks: [
+                            Block(id: "first", type: .paragraph, content: .text(.plain("First"))),
+                            Block(id: "second", type: .paragraph, content: .text(.plain("Second"))),
+                        ]
+                    ),
+                ]
+            ),
+            changeTracker: tracker
+        )
+
+        let source = state.dataSource(for: "section")
+        source.updateTextContent(blockID: "first", content: .plain("First revised"))
+        source.insertBlocks(
+            [Block(id: "inserted", type: .paragraph, content: .text(.plain("Inserted block")))],
+            at: 2
+        )
+        source.deleteBlocks(at: IndexSet(integer: 1))
+
+        tracker.showChanges = .original
+        let projection = state.reviewDisplayProjection
+
+        #expect(projection.isReadOnly)
+        #expect(projection.document.section("section")?.blocks.map(\.id) == ["first", "second"])
+        #expect(projection.document.section("section")?.blocks.first?.content.textContent?.plainText == "First")
+        #expect(projection.document.section("section")?.blocks.last?.content.textContent?.plainText == "Second")
+    }
+
+    @MainActor
     @Test func pageScopedReviewNavigationTargetsVisibleAnchors() {
         let tracker = ChangeTracker(
             currentAuthor: TrackChangesPrimitive.AuthorID(rawValue: "todd"),

@@ -16,19 +16,31 @@ public struct PageView: View {
     @State private var replyDrafts: [CommentID: String] = [:]
     @Environment(\.pageInlineBlockRenderer) private var pageInlineBlockRenderer
     private let page: ComputedPage
+    private let documentOverride: Document?
+    private let pagesOverride: [ComputedPage]?
+    private let readOnlyOverride: Bool?
     private let fieldCodeResolver = FieldCodeResolver()
     private let footnoteDisplayResolver = FootnoteDisplayResolver()
     private let blockFragmentResolver = BlockFragmentResolver()
 
-    public init(state: DocumentEditorState, page: ComputedPage) {
+    public init(
+        state: DocumentEditorState,
+        page: ComputedPage,
+        documentOverride: Document? = nil,
+        pagesOverride: [ComputedPage]? = nil,
+        readOnlyOverride: Bool? = nil
+    ) {
         self.state = state
         self.page = page
+        self.documentOverride = documentOverride
+        self.pagesOverride = pagesOverride
+        self.readOnlyOverride = readOnlyOverride
     }
 
     public var body: some View {
-        let section = state.document.section(page.sectionID)
+        let section = displayedDocument.section(page.sectionID)
         let sectionBlocks = section?.blocks ?? []
-        let isActivePage = state.currentPage == page.pageNumber && state.currentSection == page.sectionID
+        let isActivePage = !isReadOnlyMode && state.currentPage == page.pageNumber && state.currentSection == page.sectionID
         let footnoteHeight = footnoteAreaHeight
         let contentBodyHeight = max(page.template.contentHeight - footnoteHeight, 120)
 
@@ -102,7 +114,7 @@ public struct PageView: View {
         isActive: Bool,
         contentBodyHeight: CGFloat
     ) -> some View {
-        let displayedFootnoteGroups = footnoteDisplayResolver.groups(for: page, document: state.document)
+        let displayedFootnoteGroups = footnoteDisplayResolver.groups(for: page, document: displayedDocument)
 
         VStack(spacing: 0) {
             if isActive, hasPageReviewItems {
@@ -819,16 +831,16 @@ public struct PageView: View {
     }
 
     private var isFirstPageInSection: Bool {
-        state.layoutEngine.pages.first(where: { $0.sectionID == page.sectionID })?.pageNumber == page.pageNumber
+        displayedPages.first(where: { $0.sectionID == page.sectionID })?.pageNumber == page.pageNumber
     }
 
     private var usesFirstHeaderFooterSlots: Bool {
-        guard let config = state.document.section(page.sectionID)?.headerFooter else { return false }
+        guard let config = displayedDocument.section(page.sectionID)?.headerFooter else { return false }
         return config.differentFirstPage && isFirstPageInSection
     }
 
     private var usesEvenHeaderFooterSlots: Bool {
-        guard let config = state.document.section(page.sectionID)?.headerFooter else { return false }
+        guard let config = displayedDocument.section(page.sectionID)?.headerFooter else { return false }
         return !usesFirstHeaderFooterSlots && config.differentOddEven && page.pageNumber.isMultiple(of: 2)
     }
 
@@ -866,11 +878,11 @@ public struct PageView: View {
     private var fieldContext: FieldResolutionContext {
         FieldResolutionContext(
             pageNumber: page.pageNumber,
-            pageCount: state.layoutEngine.pages.count,
-            sectionNumber: (state.document.sectionIndex(page.sectionID) ?? 0) + 1,
-            date: state.document.settings.modifiedAt ?? state.document.settings.createdAt ?? Date(),
-            title: state.document.title,
-            author: state.document.settings.author
+            pageCount: displayedPages.count,
+            sectionNumber: (displayedDocument.sectionIndex(page.sectionID) ?? 0) + 1,
+            date: displayedDocument.settings.modifiedAt ?? displayedDocument.settings.createdAt ?? Date(),
+            title: displayedDocument.title,
+            author: displayedDocument.settings.author
         )
     }
 
@@ -1230,6 +1242,18 @@ public struct PageView: View {
         }
 
         return annotations
+    }
+
+    private var displayedDocument: Document {
+        documentOverride ?? state.document
+    }
+
+    private var displayedPages: [ComputedPage] {
+        pagesOverride ?? state.layoutEngine.pages
+    }
+
+    private var isReadOnlyMode: Bool {
+        readOnlyOverride ?? state.isProjectedReviewMode
     }
 
     private func annotationBadge(_ annotation: PageAnnotation) -> some View {

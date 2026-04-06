@@ -32,35 +32,41 @@ public struct DocumentEditor: View {
 
     @ViewBuilder
     private var contentView: some View {
-        switch state.viewMode {
-        case .page:
+        let projection = state.reviewDisplayProjection
+
+        if projection.isReadOnly {
             PrintPreview(state: state)
-        case .continuous, .canvas:
-            ScrollView {
-                VStack(spacing: 20) {
-                    ForEach(state.document.sections) { section in
-                        let sectionEditorState = state.richTextState(forSection: section.id)
-                        RichTextEditor(
-                            state: sectionEditorState,
-                            dataSource: state.dataSource(for: section.id),
-                            styleSheet: TextStyleSheet.standard
-                        )
-                        .frame(minHeight: 220)
-                        .padding()
-                        .background(.background)
-                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                        .shadow(color: .black.opacity(0.05), radius: 12, y: 6)
-                        .onChange(of: sectionEditorState.selection) { _, _ in
-                            state.syncCurrentLocation(using: sectionEditorState)
-                        }
-                        .onChange(of: sectionEditorState.focusedBlockID) { _, _ in
-                            state.syncCurrentLocation(using: sectionEditorState)
+        } else {
+            switch state.viewMode {
+            case .page:
+                PrintPreview(state: state)
+            case .continuous, .canvas:
+                ScrollView {
+                    VStack(spacing: 20) {
+                        ForEach(state.document.sections) { section in
+                            let sectionEditorState = state.richTextState(forSection: section.id)
+                            RichTextEditor(
+                                state: sectionEditorState,
+                                dataSource: state.dataSource(for: section.id),
+                                styleSheet: TextStyleSheet.standard
+                            )
+                            .frame(minHeight: 220)
+                            .padding()
+                            .background(.background)
+                            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                            .shadow(color: .black.opacity(0.05), radius: 12, y: 6)
+                            .onChange(of: sectionEditorState.selection) { _, _ in
+                                state.syncCurrentLocation(using: sectionEditorState)
+                            }
+                            .onChange(of: sectionEditorState.focusedBlockID) { _, _ in
+                                state.syncCurrentLocation(using: sectionEditorState)
+                            }
                         }
                     }
+                    .padding(24)
                 }
-                .padding(24)
+                .background(Color.secondary.opacity(0.05))
             }
-            .background(Color.secondary.opacity(0.05))
         }
     }
 
