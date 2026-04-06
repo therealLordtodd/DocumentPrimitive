@@ -534,6 +534,51 @@ struct DocumentModelTests {
     }
 
     @MainActor
+    @Test func changeVisibilityFiltersVisibleChangesAndCurrentSelection() {
+        let tracker = ChangeTracker(
+            currentAuthor: TrackChangesPrimitive.AuthorID(rawValue: "todd"),
+            isTracking: true
+        )
+        let state = DocumentEditorState(
+            document: Document(
+                title: "Draft",
+                sections: [
+                    DocumentSection(
+                        id: "section",
+                        blocks: [
+                            Block(id: "first", type: .paragraph, content: .text(.plain("First"))),
+                            Block(id: "second", type: .paragraph, content: .text(.plain("Second"))),
+                        ]
+                    ),
+                ]
+            ),
+            changeTracker: tracker
+        )
+
+        let source = state.dataSource(for: "section")
+        source.updateTextContent(blockID: "first", content: .plain("First edit"))
+
+        tracker.currentAuthor = "reviewer"
+        source.updateTextContent(blockID: "second", content: .plain("Second edit"))
+        let reviewerChange = try! #require(tracker.changes.last)
+
+        state.focusChange(reviewerChange.id)
+        #expect(state.currentTrackedChange?.id == reviewerChange.id)
+
+        tracker.currentAuthor = "todd"
+        tracker.showChanges = .showOnlyMine
+
+        #expect(state.changeTracker.visibleChanges.count == 1)
+        #expect(state.changeTracker.visibleChanges.first?.anchor.blockID == "first")
+        #expect(state.currentTrackedChange == nil)
+
+        tracker.showChanges = .final
+
+        #expect(state.changeTracker.visibleChanges.isEmpty)
+        #expect(state.currentTrackedChange == nil)
+    }
+
+    @MainActor
     @Test func pageScopedReviewNavigationTargetsVisibleAnchors() {
         let tracker = ChangeTracker(
             currentAuthor: TrackChangesPrimitive.AuthorID(rawValue: "todd"),

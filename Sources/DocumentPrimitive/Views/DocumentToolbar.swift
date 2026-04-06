@@ -1,6 +1,7 @@
 import BookmarkPrimitive
 import CommentPrimitive
 import SwiftUI
+import TrackChangesPrimitive
 
 public struct DocumentToolbar: View {
     @Bindable private var state: DocumentEditorState
@@ -27,6 +28,15 @@ public struct DocumentToolbar: View {
                     set: { state.changeTracker.isTracking = $0 }
                 )
             )
+
+            Menu {
+                visibilityButton("All Changes", visibility: .showAll)
+                visibilityButton("My Changes", visibility: .showOnlyMine)
+                visibilityButton("Final View", visibility: .final)
+            } label: {
+                Label(changeVisibilityLabel, systemImage: "line.3.horizontal.decrease.circle")
+            }
+            .menuStyle(.borderlessButton)
 
             Menu {
                 if let currentCommentSummary = state.currentCommentSummary {
@@ -190,6 +200,19 @@ public struct DocumentToolbar: View {
         state.changeTracker.visibleChanges.count
     }
 
+    private var changeVisibilityLabel: String {
+        switch state.changeTracker.showChanges {
+        case .showAll:
+            "All Changes"
+        case .showOnlyMine:
+            "My Changes"
+        case .final_:
+            "Final View"
+        case .original:
+            "Original View"
+        }
+    }
+
     private var changeCountLabel: String {
         if changeCount == 0 {
             return "No Changes"
@@ -219,5 +242,22 @@ public struct DocumentToolbar: View {
 
     private var commentCount: Int {
         state.commentStore.openComments.count
+    }
+
+    @ViewBuilder
+    private func visibilityButton(_ title: String, visibility: ChangeVisibility) -> some View {
+        Button {
+            state.changeTracker.showChanges = visibility
+            if state.currentTrackedChange == nil {
+                state.currentTrackedChangeID = nil
+            }
+        } label: {
+            HStack {
+                Text(title)
+                if state.changeTracker.showChanges == visibility {
+                    Image(systemName: "checkmark")
+                }
+            }
+        }
     }
 }

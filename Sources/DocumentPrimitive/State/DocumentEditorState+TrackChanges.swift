@@ -23,7 +23,6 @@ extension DocumentEditorState {
     public var currentTrackedChange: TrackedChange? {
         guard let currentTrackedChangeID else { return nil }
         return changeTracker.visibleChanges.first(where: { $0.id == currentTrackedChangeID })
-            ?? changeTracker.changes.first(where: { $0.id == currentTrackedChangeID })
     }
 
     public var currentTrackedChangeSummary: String? {
