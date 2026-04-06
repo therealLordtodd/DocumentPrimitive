@@ -62,6 +62,11 @@ extension DocumentEditorState {
         bookmarkStore.resolve(reference, from: currentAnchor)
     }
 
+    public func focusBookmark(_ id: BookmarkID) {
+        guard let bookmark = bookmarkStore.bookmark(for: id) else { return }
+        focusBookmarkAnchor(bookmark.anchor)
+    }
+
     public func bookmarks(on page: ComputedPage) -> [Bookmark] {
         let visibleContentIDs = visibleContentIDs(on: page)
         return bookmarkStore.bookmarks.filter { visibleContentIDs.contains($0.anchor.contentID) }
@@ -90,6 +95,27 @@ extension DocumentEditorState {
         return commentStore.comments.filter { comment in
             guard let contentID = anchoredContentID(for: comment) else { return false }
             return visibleContentIDs.contains(contentID)
+        }
+    }
+
+    public func focusComment(_ id: CommentID) {
+        guard let comment = commentStore.comment(for: id) else { return }
+        commentStore.activeCommentID = id
+
+        switch comment.anchor.anchorType {
+        case TextCommentAnchor.anchorType:
+            guard let anchor = try? comment.anchor.resolve(TextCommentAnchor.self) else { return }
+            focusDocumentSelection(
+                .range(
+                    start: TextPosition(blockID: BlockID(anchor.blockID), offset: anchor.offset),
+                    end: TextPosition(blockID: BlockID(anchor.blockID), offset: anchor.offset + anchor.length)
+                )
+            )
+        case ObjectCommentAnchor.anchorType:
+            guard let anchor = try? comment.anchor.resolve(ObjectCommentAnchor.self) else { return }
+            focusDocumentSelection(.blockSelection([BlockID(anchor.objectID)]))
+        default:
+            return
         }
     }
 
@@ -142,6 +168,14 @@ extension DocumentEditorState {
         }
 
         return items
+    }
+
+    private func focusBookmarkAnchor(_ anchor: BookmarkAnchor) {
+        let selection = TextSelection.caret(
+            BlockID(anchor.contentID),
+            offset: anchor.offset ?? 0
+        )
+        focusDocumentSelection(selection)
     }
 
     private func commentAnchor(for selection: TextSelection) -> AnyCommentAnchor? {

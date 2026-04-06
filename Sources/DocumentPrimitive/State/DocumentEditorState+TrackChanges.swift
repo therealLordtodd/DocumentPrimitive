@@ -53,7 +53,7 @@ extension DocumentEditorState {
         }
 
         currentTrackedChangeID = change.id
-        focusTrackedSelection(
+        focusDocumentSelection(
             TextSelection.caret(
                 BlockID(change.anchor.blockID),
                 offset: change.anchor.offset
@@ -206,9 +206,9 @@ extension DocumentEditorState {
         )
     }
 
-    private func focusTrackedSelection(_ selection: TextSelection) {
-        guard let position = trackedPosition(for: selection) else { return }
-        guard let sectionID = sectionID(for: position.blockID) else { return }
+    func focusDocumentSelection(_ selection: TextSelection) {
+        guard let position = position(for: selection) else { return }
+        guard let sectionID = sectionID(forBlockID: position.blockID) else { return }
 
         richTextState.selection = selection
         richTextState.focusedBlockID = position.blockID
@@ -238,7 +238,7 @@ extension DocumentEditorState {
         syncCurrentLocationToSelection()
     }
 
-    private func trackedPosition(for selection: TextSelection) -> TextPosition? {
+    func position(for selection: TextSelection) -> TextPosition? {
         switch selection {
         case let .caret(blockID, offset):
             return TextPosition(blockID: blockID, offset: offset)
@@ -250,7 +250,7 @@ extension DocumentEditorState {
         }
     }
 
-    private func sectionID(for blockID: BlockID) -> SectionID? {
+    func sectionID(forBlockID blockID: BlockID) -> SectionID? {
         document.sections.first(where: { section in
             section.blocks.contains(where: { $0.id == blockID })
         })?.id

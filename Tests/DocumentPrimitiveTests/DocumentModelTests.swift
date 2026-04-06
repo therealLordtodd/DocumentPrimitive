@@ -114,6 +114,36 @@ struct DocumentModelTests {
     }
 
     @MainActor
+    @Test func focusBookmarkMovesEditorToAnchoredLocation() {
+        let longText = String(repeating: "Page filler ", count: 2500)
+        let state = DocumentEditorState(
+            document: Document(
+                title: "Draft",
+                sections: [
+                    DocumentSection(
+                        id: "section",
+                        blocks: [
+                            Block(id: "lead", type: .paragraph, content: .text(.plain(longText))),
+                            Block(id: "tail", type: .paragraph, content: .text(.plain("Tail"))),
+                        ]
+                    ),
+                ]
+            )
+        )
+
+        state.addBookmark(named: "Tail", for: "tail", offset: 2)
+        let bookmark = try! #require(state.bookmarkStore.bookmark(named: "Tail"))
+        let tailPage = try! #require(state.layoutEngine.pageNumber(for: "tail"))
+
+        state.focusBookmark(bookmark.id)
+
+        #expect(state.currentSection == "section")
+        #expect(state.currentPage == tailPage)
+        #expect(state.richTextState.selection == .caret("tail", offset: 2))
+        #expect(state.richTextState.focusedBlockID == "tail")
+    }
+
+    @MainActor
     @Test func addCommentCreatesQuotedTextAnchorFromSelection() throws {
         let state = DocumentEditorState(
             document: Document(
@@ -183,6 +213,41 @@ struct DocumentModelTests {
         #expect(state.bookmarks(on: firstPage).isEmpty)
         #expect(Set(state.bookmarks(on: secondPage).map(\.name)) == ["Intro", "Target"])
         #expect(state.comments(on: secondPage).isEmpty)
+    }
+
+    @MainActor
+    @Test func focusCommentRestoresAnchoredSelection() {
+        let state = DocumentEditorState(
+            document: Document(
+                title: "Draft",
+                sections: [
+                    DocumentSection(
+                        id: "section",
+                        blocks: [
+                            Block(id: "body", type: .paragraph, content: .text(.plain("Hello world"))),
+                        ]
+                    ),
+                ]
+            )
+        )
+
+        state.richTextState.selection = .range(
+            start: TextPosition(blockID: "body", offset: 6),
+            end: TextPosition(blockID: "body", offset: 11)
+        )
+        let comment = try! #require(state.addComment(body: "Needs review", authorID: "todd"))
+
+        state.richTextState.selection = .caret("body", offset: 0)
+        state.focusComment(comment.id)
+
+        #expect(state.commentStore.activeCommentID == comment.id)
+        #expect(
+            state.richTextState.selection
+                == .range(
+                    start: TextPosition(blockID: "body", offset: 6),
+                    end: TextPosition(blockID: "body", offset: 11)
+                )
+        )
     }
 
     @MainActor
