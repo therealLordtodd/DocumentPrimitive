@@ -1,3 +1,5 @@
+import BookmarkPrimitive
+import CommentPrimitive
 import Foundation
 import RichTextPrimitive
 import SwiftUI
@@ -48,10 +50,20 @@ public struct PageView: View {
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         .shadow(color: .black.opacity(0.08), radius: 20, y: 8)
         .overlay(alignment: .topTrailing) {
-            Text("Page \(page.pageNumber)")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .padding(12)
+            VStack(alignment: .trailing, spacing: 8) {
+                Text("Page \(page.pageNumber)")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+
+                if !pageAnnotations.isEmpty {
+                    VStack(alignment: .trailing, spacing: 6) {
+                        ForEach(pageAnnotations) { annotation in
+                            annotationBadge(annotation)
+                        }
+                    }
+                }
+            }
+            .padding(12)
         }
         .onTapGesture {
             state.currentPage = page.pageNumber
@@ -782,4 +794,44 @@ public struct PageView: View {
             }
         }
     }
+
+    private var pageAnnotations: [PageAnnotation] {
+        let bookmarks = state.bookmarks(on: page).map {
+            PageAnnotation(
+                title: $0.name,
+                icon: "bookmark.fill",
+                tint: .blue
+            )
+        }
+        let comments = state.comments(on: page)
+            .filter { $0.status == .open }
+            .map {
+                PageAnnotation(
+                    title: $0.body,
+                    icon: "text.bubble.fill",
+                    tint: .orange
+                )
+            }
+
+        return Array((bookmarks + comments).prefix(5))
+    }
+
+    private func annotationBadge(_ annotation: PageAnnotation) -> some View {
+        Label(annotation.title, systemImage: annotation.icon)
+            .font(.caption2.weight(.medium))
+            .foregroundStyle(annotation.tint)
+            .lineLimit(1)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
+            .background(annotation.tint.opacity(0.1))
+            .clipShape(Capsule())
+            .frame(maxWidth: 180, alignment: .trailing)
+    }
+}
+
+private struct PageAnnotation: Identifiable {
+    let id = UUID()
+    let title: String
+    let icon: String
+    let tint: Color
 }

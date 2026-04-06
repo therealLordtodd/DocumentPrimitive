@@ -65,7 +65,11 @@ let package = Package(
         ),
         .testTarget(
             name: "DocumentPrimitiveTests",
-            dependencies: ["DocumentPrimitive"]
+            dependencies: [
+                "DocumentPrimitive",
+                .product(name: "BookmarkPrimitive", package: "BookmarkPrimitive"),
+                .product(name: "CommentPrimitive", package: "CommentPrimitive"),
+            ]
         ),
         .testTarget(
             name: "DocumentPrimitiveGridTests",

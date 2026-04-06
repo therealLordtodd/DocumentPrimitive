@@ -1,3 +1,5 @@
+import BookmarkPrimitive
+import CommentPrimitive
 import Foundation
 import Testing
 @testable import DocumentPrimitive
@@ -45,6 +47,141 @@ struct DocumentModelTests {
         let data = try JSONEncoder().encode(document)
         let decoded = try JSONDecoder().decode(Document.self, from: data)
         #expect(decoded == document)
+    }
+
+    @MainActor
+    @Test func autoBookmarksTrackHeadingsAndPreserveManualBookmarks() {
+        let state = DocumentEditorState(
+            document: Document(
+                title: "Draft",
+                sections: [
+                    DocumentSection(
+                        id: "section",
+                        blocks: [
+                            Block(id: "heading", type: .heading, content: .heading(.plain("Intro"), level: 1)),
+                            Block(id: "body", type: .paragraph, content: .text(.plain("Hello"))),
+                        ]
+                    ),
+                ]
+            )
+        )
+
+        #expect(state.bookmarkStore.autoBookmarks.map(\.name) == ["Intro"])
+
+        state.addBookmark(named: "Custom", for: "body")
+        state.replaceBlock(
+            Block(id: "heading", type: .heading, content: .heading(.plain("Overview"), level: 1)),
+            in: "section"
+        )
+
+        #expect(state.bookmarkStore.autoBookmarks.map(\.name) == ["Overview"])
+        #expect(state.bookmarkStore.manualBookmarks.map(\.name) == ["Custom"])
+    }
+
+    @MainActor
+    @Test func bookmarkCrossReferencesResolvePageNumbersAndRelativePosition() {
+        let state = DocumentEditorState(
+            document: Document(
+                title: "Draft",
+                sections: [
+                    DocumentSection(
+                        id: "section",
+                        blocks: [
+                            Block(id: "intro", type: .heading, content: .heading(.plain("Intro"), level: 1)),
+                            Block(id: "body", type: .paragraph, content: .text(.plain("Hello"))),
+                        ]
+                    ),
+                ]
+            )
+        )
+
+        state.addBookmark(named: "Tail", for: "body")
+
+        let introBookmark = try! #require(state.bookmarkStore.bookmark(named: "Intro"))
+        let tailBookmark = try! #require(state.bookmarkStore.bookmark(named: "Tail"))
+
+        let pageReference = state.resolvedReference(
+            CrossReference(targetBookmarkID: introBookmark.id, displayStyle: .pageNumber)
+        )
+        let relativeReference = state.resolvedReference(
+            CrossReference(targetBookmarkID: introBookmark.id, displayStyle: .aboveBelow),
+            from: tailBookmark.anchor
+        )
+
+        #expect(pageReference.displayText == "page 1")
+        #expect(relativeReference.displayText == "above")
+    }
+
+    @MainActor
+    @Test func addCommentCreatesQuotedTextAnchorFromSelection() throws {
+        let state = DocumentEditorState(
+            document: Document(
+                title: "Draft",
+                sections: [
+                    DocumentSection(
+                        id: "section",
+                        blocks: [
+                            Block(id: "body", type: .paragraph, content: .text(.plain("Hello world"))),
+                        ]
+                    ),
+                ]
+            )
+        )
+
+        state.richTextState.selection = .range(
+            start: TextPosition(blockID: "body", offset: 6),
+            end: TextPosition(blockID: "body", offset: 11)
+        )
+
+        let comment = try #require(state.addComment(body: "Needs review", authorID: "todd"))
+        let anchor = try comment.anchor.resolve(TextCommentAnchor.self)
+
+        #expect(state.commentStore.comments.count == 1)
+        #expect(anchor.blockID == "body")
+        #expect(anchor.offset == 6)
+        #expect(anchor.length == 5)
+        #expect(anchor.selector.exact == "world")
+    }
+
+    @MainActor
+    @Test func pageAnnotationLookupsFilterBookmarksAndCommentsByVisibleBlocks() {
+        let state = DocumentEditorState(
+            document: Document(
+                title: "Draft",
+                sections: [
+                    DocumentSection(
+                        id: "section",
+                        blocks: [
+                            Block(id: "first", type: .paragraph, content: .text(.plain("Hello world"))),
+                            Block(id: "second", type: .heading, content: .heading(.plain("Intro"), level: 1)),
+                        ]
+                    ),
+                ]
+            )
+        )
+
+        state.addBookmark(named: "Target", for: "second")
+        state.richTextState.selection = .range(
+            start: TextPosition(blockID: "first", offset: 0),
+            end: TextPosition(blockID: "first", offset: 5)
+        )
+        _ = state.addComment(body: "Check intro", authorID: "todd")
+
+        let firstPage = ComputedPage(
+            sectionID: "section",
+            pageNumber: 1,
+            blockRanges: [BlockRange(startIndex: 0, endIndex: 0)]
+        )
+        let secondPage = ComputedPage(
+            sectionID: "section",
+            pageNumber: 2,
+            blockRanges: [BlockRange(startIndex: 1, endIndex: 1)]
+        )
+
+        #expect(state.comments(on: firstPage).count == 1)
+        #expect(state.bookmarks(on: firstPage).isEmpty)
+        #expect(Set(state.bookmarks(on: secondPage).map(\.name)) == ["Intro", "Target"])
+        #expect(state.comments(on: secondPage).isEmpty)
     }
 
     @MainActor

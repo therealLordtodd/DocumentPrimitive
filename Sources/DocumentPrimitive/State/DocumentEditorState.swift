@@ -1,3 +1,5 @@
+import BookmarkPrimitive
+import CommentPrimitive
 import Foundation
 import Observation
 import RichTextPrimitive
@@ -15,6 +17,7 @@ public final class DocumentEditorState {
             }
             syncCurrentLocationToSelection()
             ensureCurrentPageExists()
+            refreshAnchoredStores()
         }
     }
 
@@ -24,6 +27,8 @@ public final class DocumentEditorState {
     public var showFormatting: Bool
     public var currentPage: Int
     public var currentSection: SectionID?
+    public let bookmarkStore: BookmarkStore
+    public let commentStore: CommentStore
     public let layoutEngine: PageLayoutEngine
 
     private var sectionDataSources: [SectionID: SectionDataSource] = [:]
@@ -45,7 +50,9 @@ public final class DocumentEditorState {
         showRuler: Bool = true,
         showFormatting: Bool = true,
         currentPage: Int = 1,
-        currentSection: SectionID? = nil
+        currentSection: SectionID? = nil,
+        bookmarkStore: BookmarkStore = BookmarkStore(),
+        commentStore: CommentStore = CommentStore()
     ) {
         self.document = document
         self.richTextState = richTextState
@@ -54,10 +61,13 @@ public final class DocumentEditorState {
         self.showFormatting = showFormatting
         self.currentPage = currentPage
         self.currentSection = currentSection ?? document.sections.first?.id
+        self.bookmarkStore = bookmarkStore
+        self.commentStore = commentStore
         self.layoutEngine = PageLayoutEngine(document: document)
         self.layoutEngine.reflow()
         syncCurrentLocationToSelection()
         ensureCurrentPageExists()
+        refreshAnchoredStores()
     }
 
     public var canGoToPreviousPage: Bool {
@@ -227,6 +237,7 @@ public final class DocumentEditorState {
         broadcastSectionMutation(for: sectionID)
         syncCurrentLocationToSelection()
         ensureCurrentPageExists()
+        refreshAnchoredStores()
     }
 
     fileprivate func headerFooterRuns(
@@ -341,6 +352,7 @@ public final class DocumentEditorState {
         broadcastHeaderFooterMutation(for: sectionID)
         syncCurrentLocationToSelection()
         ensureCurrentPageExists()
+        refreshAnchoredStores()
     }
 
     public func goToPreviousPage() {
