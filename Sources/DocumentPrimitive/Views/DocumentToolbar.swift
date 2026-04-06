@@ -33,6 +33,7 @@ public struct DocumentToolbar: View {
                 visibilityButton("All Changes", visibility: .showAll)
                 visibilityButton("My Changes", visibility: .showOnlyMine)
                 visibilityButton("Final View", visibility: .final)
+                visibilityButton("Original View", visibility: .original)
             } label: {
                 Label(changeVisibilityLabel, systemImage: "line.3.horizontal.decrease.circle")
             }
@@ -197,7 +198,7 @@ public struct DocumentToolbar: View {
     }
 
     private var changeCount: Int {
-        state.changeTracker.visibleChanges.count
+        state.reviewableTrackedChanges.count
     }
 
     private var changeVisibilityLabel: String {
@@ -218,7 +219,7 @@ public struct DocumentToolbar: View {
             return "No Changes"
         }
         if let currentTrackedChangeID = state.currentTrackedChangeID,
-           let index = state.changeTracker.visibleChanges.firstIndex(where: { $0.id == currentTrackedChangeID }) {
+           let index = state.reviewableTrackedChanges.firstIndex(where: { $0.id == currentTrackedChangeID }) {
             return "Change \(index + 1)/\(changeCount)"
         }
         return changeCount == 1 ? "1 Change" : "\(changeCount) Changes"
@@ -248,9 +249,6 @@ public struct DocumentToolbar: View {
     private func visibilityButton(_ title: String, visibility: ChangeVisibility) -> some View {
         Button {
             state.changeTracker.showChanges = visibility
-            if state.currentTrackedChange == nil {
-                state.currentTrackedChangeID = nil
-            }
         } label: {
             HStack {
                 Text(title)

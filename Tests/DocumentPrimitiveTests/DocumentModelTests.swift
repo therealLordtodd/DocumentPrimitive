@@ -601,12 +601,51 @@ struct DocumentModelTests {
         tracker.showChanges = .showOnlyMine
 
         #expect(state.changeTracker.visibleChanges.count == 1)
+        #expect(state.reviewableTrackedChanges.count == 1)
         #expect(state.changeTracker.visibleChanges.first?.anchor.blockID == "first")
         #expect(state.currentTrackedChange == nil)
 
         tracker.showChanges = .final
 
         #expect(state.changeTracker.visibleChanges.isEmpty)
+        #expect(state.reviewableTrackedChanges.count == 2)
+        #expect(state.currentTrackedChange?.id == reviewerChange.id)
+    }
+
+    @MainActor
+    @Test func finalViewRetainsTrackedChangeReviewActions() {
+        let tracker = ChangeTracker(
+            currentAuthor: TrackChangesPrimitive.AuthorID(rawValue: "todd"),
+            isTracking: true
+        )
+        let state = DocumentEditorState(
+            document: Document(
+                title: "Draft",
+                sections: [
+                    DocumentSection(
+                        id: "section",
+                        blocks: [Block(id: "body", type: .paragraph, content: .text(.plain("Hello")))]
+                    ),
+                ]
+            ),
+            changeTracker: tracker
+        )
+        let source = state.dataSource(for: "section")
+
+        source.updateTextContent(blockID: "body", content: .plain("Hello world"))
+        let change = try! #require(tracker.changes.first)
+
+        tracker.showChanges = .final
+        state.focusChange(change.id)
+
+        #expect(state.changeTracker.visibleChanges.isEmpty)
+        #expect(state.reviewableTrackedChanges.count == 1)
+        #expect(state.currentTrackedChange?.id == change.id)
+        #expect(state.currentTrackedChangeSummary == "Insert: world")
+
+        state.acceptCurrentChange()
+
+        #expect(tracker.changes.isEmpty)
         #expect(state.currentTrackedChange == nil)
     }
 
@@ -802,6 +841,9 @@ struct DocumentModelTests {
             return
         }
 
+        state.focusChange(change.id)
+        #expect(state.currentTrackedChangeSummary == "Bold on")
+
         state.rejectChange(change.id)
 
         let restoredRun = try! #require(state.document.section("section")?.blocks.first?.content.textContent?.runs.first)
@@ -917,7 +959,41 @@ struct DocumentModelTests {
         #expect(tracker.changes.count == 1)
         #expect(tracker.changes.first?.id == secondChange.id)
         #expect(state.currentTrackedChangeID == secondChange.id)
-        #expect(state.currentTrackedChangeSummary == "Formatting change")
+        #expect(state.currentTrackedChangeSummary == "Bold on")
+    }
+
+    @MainActor
+    @Test func headingLevelChangesReportSpecificSummary() {
+        let tracker = ChangeTracker(
+            currentAuthor: TrackChangesPrimitive.AuthorID(rawValue: "todd"),
+            isTracking: true
+        )
+        let state = DocumentEditorState(
+            document: Document(
+                title: "Draft",
+                sections: [
+                    DocumentSection(
+                        id: "section",
+                        blocks: [
+                            Block(id: "heading", type: .heading, content: .heading(.plain("Intro"), level: 1)),
+                        ]
+                    ),
+                ]
+            ),
+            changeTracker: tracker
+        )
+
+        let source = state.dataSource(for: "section")
+        source.updateBlockType(
+            blockID: "heading",
+            type: .heading,
+            content: .heading(.plain("Intro"), level: 2)
+        )
+
+        let change = try! #require(tracker.changes.first)
+        state.focusChange(change.id)
+
+        #expect(state.currentTrackedChangeSummary == "Heading level: 1 -> 2")
     }
 
     @MainActor

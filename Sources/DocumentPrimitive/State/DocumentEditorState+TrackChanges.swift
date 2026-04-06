@@ -20,78 +20,60 @@ extension DocumentEditorState {
         return changeTracker.visibleChanges.filter { visibleContentIDs.contains($0.anchor.blockID) }
     }
 
+    public var reviewableTrackedChanges: [TrackedChange] {
+        switch changeTracker.showChanges {
+        case .showOnlyMine:
+            changeTracker.changes.filter { $0.author == changeTracker.currentAuthor }
+        case .showAll, .final_, .original:
+            changeTracker.changes
+        }
+    }
+
     public var currentTrackedChange: TrackedChange? {
         guard let currentTrackedChangeID else { return nil }
-        return changeTracker.visibleChanges.first(where: { $0.id == currentTrackedChangeID })
+        return reviewableTrackedChanges.first(where: { $0.id == currentTrackedChangeID })
     }
 
     public var currentTrackedChangeSummary: String? {
         guard let change = currentTrackedChange else { return nil }
-        let context = trackedChangeContexts[change.id]
-
-        switch change.type {
-        case let .insertion(text):
-            let preview = text.trimmingCharacters(in: .whitespacesAndNewlines)
-            if case let .insert(blocks, _) = context?.operation {
-                return structuralChangeSummary(
-                    count: blocks.count,
-                    singular: "Inserted block",
-                    plural: "Inserted blocks",
-                    preview: preview
-                )
-            }
-            return preview.isEmpty ? "Insertion" : "Insert: \(String(preview.prefix(24)))"
-        case let .deletion(text):
-            let preview = text.trimmingCharacters(in: .whitespacesAndNewlines)
-            if case let .delete(blocks, _) = context?.operation {
-                return structuralChangeSummary(
-                    count: blocks.count,
-                    singular: "Deleted block",
-                    plural: "Deleted blocks",
-                    preview: preview
-                )
-            }
-            return preview.isEmpty ? "Deletion" : "Delete: \(String(preview.prefix(24)))"
-        case .formatChange:
-            if case let .replace(before, after) = context?.operation, before.type != after.type {
-                return "Block type: \(readableBlockType(before.type)) -> \(readableBlockType(after.type))"
-            }
-            return "Formatting change"
-        }
+        return TrackedChangeSummaryResolver().summary(
+            for: change,
+            context: trackedChangeContexts[change.id]
+        )
     }
 
     public func goToNextChange() {
-        let visibleChanges = changeTracker.visibleChanges
-        guard !visibleChanges.isEmpty else { return }
+        let reviewableChanges = reviewableTrackedChanges
+        guard !reviewableChanges.isEmpty else { return }
 
         guard let currentTrackedChangeID,
-              let currentIndex = visibleChanges.firstIndex(where: { $0.id == currentTrackedChangeID }),
-              currentIndex + 1 < visibleChanges.count
+              let currentIndex = reviewableChanges.firstIndex(where: { $0.id == currentTrackedChangeID }),
+              currentIndex + 1 < reviewableChanges.count
         else {
-            focusChange(visibleChanges.first!.id)
+            focusChange(reviewableChanges.first!.id)
             return
         }
 
-        focusChange(visibleChanges[currentIndex + 1].id)
+        focusChange(reviewableChanges[currentIndex + 1].id)
     }
 
     public func goToPreviousChange() {
-        let visibleChanges = changeTracker.visibleChanges
-        guard !visibleChanges.isEmpty else { return }
+        let reviewableChanges = reviewableTrackedChanges
+        guard !reviewableChanges.isEmpty else { return }
 
         guard let currentTrackedChangeID,
-              let currentIndex = visibleChanges.firstIndex(where: { $0.id == currentTrackedChangeID }),
+              let currentIndex = reviewableChanges.firstIndex(where: { $0.id == currentTrackedChangeID }),
               currentIndex > 0
         else {
-            focusChange(visibleChanges.last!.id)
+            focusChange(reviewableChanges.last!.id)
             return
         }
 
-        focusChange(visibleChanges[currentIndex - 1].id)
+        focusChange(reviewableChanges[currentIndex - 1].id)
     }
 
     public func focusChange(_ id: ChangeID) {
-        guard let change = changeTracker.visibleChanges.first(where: { $0.id == id })
+        guard let change = reviewableTrackedChanges.first(where: { $0.id == id })
             ?? changeTracker.changes.first(where: { $0.id == id })
         else {
             return
@@ -114,11 +96,11 @@ extension DocumentEditorState {
     }
 
     public func acceptCurrentChange() {
-        let visibleChanges = changeTracker.visibleChanges
-        guard !visibleChanges.isEmpty else { return }
+        let reviewableChanges = reviewableTrackedChanges
+        guard !reviewableChanges.isEmpty else { return }
 
-        let target = currentTrackedChange ?? visibleChanges.first!
-        let successor = successorChangeID(afterRemoving: target.id, from: visibleChanges)
+        let target = currentTrackedChange ?? reviewableChanges.first!
+        let successor = successorChangeID(afterRemoving: target.id, from: reviewableChanges)
 
         acceptChange(target.id)
         if let successor {
@@ -127,11 +109,11 @@ extension DocumentEditorState {
     }
 
     public func rejectCurrentChange() {
-        let visibleChanges = changeTracker.visibleChanges
-        guard !visibleChanges.isEmpty else { return }
+        let reviewableChanges = reviewableTrackedChanges
+        guard !reviewableChanges.isEmpty else { return }
 
-        let target = currentTrackedChange ?? visibleChanges.first!
-        let successor = successorChangeID(afterRemoving: target.id, from: visibleChanges)
+        let target = currentTrackedChange ?? reviewableChanges.first!
+        let successor = successorChangeID(afterRemoving: target.id, from: reviewableChanges)
 
         rejectChange(target.id)
         if let successor {
@@ -649,40 +631,6 @@ extension DocumentEditorState {
         }
 
         return document.sections.flatMap(\.blocks).first?.id
-    }
-
-    private func structuralChangeSummary(
-        count: Int,
-        singular: String,
-        plural: String,
-        preview: String
-    ) -> String {
-        let title = count == 1 ? singular : "\(count) \(plural.lowercased())"
-        guard !preview.isEmpty else { return title }
-        return "\(title): \(String(preview.prefix(24)))"
-    }
-
-    private func readableBlockType(_ type: BlockType) -> String {
-        switch type {
-        case .paragraph:
-            "paragraph"
-        case .heading:
-            "heading"
-        case .blockQuote:
-            "quote"
-        case .codeBlock:
-            "code block"
-        case .list:
-            "list"
-        case .table:
-            "table"
-        case .image:
-            "image"
-        case .divider:
-            "divider"
-        case .embed:
-            "embed"
-        }
     }
 
     private func successorChangeID(
