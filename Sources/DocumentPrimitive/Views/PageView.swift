@@ -1,9 +1,11 @@
 import BookmarkPrimitive
+import ColorPickerPrimitive
 import CommentPrimitive
 import Foundation
 import RichTextPrimitive
 import SwiftUI
 import TrackChangesPrimitive
+import TypographyPrimitive
 #if canImport(AppKit)
 import AppKit
 #elseif canImport(UIKit)
@@ -160,7 +162,7 @@ public struct PageView: View {
                     .padding(.vertical, 6)
 
                 VStack(alignment: .leading, spacing: 4) {
-                    ForEach(displayedFootnoteGroups) { group in
+                    ForEach(Array(displayedFootnoteGroups.enumerated()), id: \.offset) { _, group in
                         if let title = group.title {
                             Text(title)
                                 .font(.caption.weight(.semibold))
@@ -168,14 +170,20 @@ public struct PageView: View {
                                 .padding(.top, 2)
                         }
 
-                        ForEach(group.footnotes) { footnote in
+                        ForEach(Array(group.footnotes.enumerated()), id: \.offset) { _, footnote in
                             HStack(alignment: .top, spacing: 6) {
                                 Text(footnote.marker)
                                     .font(.caption.weight(.semibold))
                                     .foregroundStyle(.secondary)
                                     .frame(minWidth: 24, alignment: .leading)
 
-                                previewText(for: footnote.content, fallbackSize: 11)
+                                previewText(
+                                    for: footnote.content,
+                                    paragraphStyle: scaledParagraphStyle(
+                                        from: documentTextStyleSheet.defaultStyle,
+                                        fontSize: 11
+                                    )
+                                )
                                     .frame(maxWidth: .infinity, alignment: .leading)
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -271,14 +279,12 @@ public struct PageView: View {
                 }
             }
         } else {
-            Text(render(runs: runs))
+            previewText(
+                for: TextContent(runs: fieldCodeResolver.resolve(runs: runs, context: fieldContext)),
+                paragraphStyle: documentTextStyleSheet.defaultStyle
+            )
                 .frame(maxWidth: .infinity, alignment: alignment)
         }
-    }
-
-    private func render(runs: [TextRun]) -> String {
-        let resolvedRuns = fieldCodeResolver.resolve(runs: runs, context: fieldContext)
-        return resolvedRuns.map(\.text).joined()
     }
 
     @ViewBuilder
@@ -549,14 +555,15 @@ public struct PageView: View {
 
     @ViewBuilder
     private func preview(for block: Block) -> some View {
+        let paragraphStyle = documentTextStyleSheet.style(for: block)
+
         switch block.content {
         case let .text(content):
-            previewText(for: content)
+            previewText(for: content, paragraphStyle: paragraphStyle)
         case let .heading(content, level):
             previewText(
                 for: content,
-                fallbackSize: headingSize(level: level),
-                defaultWeight: .bold
+                paragraphStyle: paragraphStyle
             )
             .padding(.top, level <= 2 ? 8 : 4)
         case let .blockQuote(content):
@@ -565,14 +572,14 @@ public struct PageView: View {
                     .fill(Color.secondary.opacity(0.35))
                     .frame(width: 4)
 
-                previewText(for: content, fallbackSize: 14)
-                    .foregroundStyle(.secondary)
+                previewText(for: content, paragraphStyle: paragraphStyle)
             }
             .padding(.vertical, 4)
         case let .codeBlock(code, _):
             ScrollView(.horizontal, showsIndicators: false) {
                 Text(verbatim: code)
-                    .font(.system(size: 12, design: .monospaced))
+                    .font(font(for: paragraphStyle, designOverride: .monospaced))
+                    .foregroundStyle(paragraphStyle.textColor.swiftUIColor)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(12)
             }
@@ -581,25 +588,39 @@ public struct PageView: View {
         case let .list(content, style, indentLevel):
             HStack(alignment: .top, spacing: 8) {
                 Text(listPrefix(for: style))
-                    .font(.body.weight(.semibold))
+                    .font(font(for: paragraphStyle, weightOverride: .semibold))
+                    .foregroundStyle(paragraphStyle.textColor.swiftUIColor)
                     .frame(width: 20, alignment: .leading)
 
-                previewText(for: content)
+                previewText(for: content, paragraphStyle: paragraphStyle)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             .padding(.leading, CGFloat(indentLevel) * 18)
         case let .table(table):
             VStack(alignment: .leading, spacing: 6) {
                 if let caption = table.caption {
-                    previewText(for: caption, fallbackSize: 12, defaultWeight: .semibold)
-                        .foregroundStyle(.secondary)
+                    previewText(
+                        for: caption,
+                        paragraphStyle: scaledParagraphStyle(
+                            from: documentTextStyleSheet.defaultStyle,
+                            fontSize: 12,
+                            fontWeight: .semibold,
+                            textColor: ColorValue(red: 0.45, green: 0.45, blue: 0.48)
+                        )
+                    )
                 }
 
                 VStack(spacing: 0) {
                     ForEach(Array(table.rows.enumerated()), id: \.offset) { _, row in
                         HStack(spacing: 0) {
                             ForEach(Array(row.enumerated()), id: \.offset) { _, cell in
-                                previewText(for: cell, fallbackSize: 13)
+                                previewText(
+                                    for: cell,
+                                    paragraphStyle: scaledParagraphStyle(
+                                        from: documentTextStyleSheet.defaultStyle,
+                                        fontSize: 13
+                                    )
+                                )
                                     .frame(maxWidth: .infinity, alignment: .leading)
                                     .padding(8)
                                     .overlay {
@@ -630,8 +651,10 @@ public struct PageView: View {
                 Text(embed.kind.uppercased())
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(.secondary)
-                Text(embed.payload ?? "[Embedded content]")
-                    .font(.body)
+                previewText(
+                    for: .plain(embed.payload ?? "[Embedded content]"),
+                    paragraphStyle: paragraphStyle
+                )
             }
             .padding(12)
             .background(Color.secondary.opacity(0.06))
@@ -641,35 +664,22 @@ public struct PageView: View {
 
     private func previewText(
         for content: TextContent,
-        fallbackSize: CGFloat = 14,
-        defaultWeight: Font.Weight = .regular,
-        defaultDesign: Font.Design = .default
+        paragraphStyle: ParagraphStyle
     ) -> Text {
         let resolved = resolvedTextContent(content)
         return resolved.runs.reduce(Text("")) { partial, run in
             partial + previewText(
                 for: run,
-                fallbackSize: fallbackSize,
-                defaultWeight: defaultWeight,
-                defaultDesign: defaultDesign
+                paragraphStyle: paragraphStyle
             )
         }
     }
 
     private func previewText(
         for run: TextRun,
-        fallbackSize: CGFloat,
-        defaultWeight: Font.Weight,
-        defaultDesign: Font.Design
+        paragraphStyle: ParagraphStyle
     ) -> Text {
-        let size = run.attributes.fontSize ?? fallbackSize
-        let design: Font.Design = run.attributes.code ? .monospaced : defaultDesign
-
-        let font: Font = if let family = run.attributes.fontFamily, !family.isEmpty {
-            .custom(family, size: size)
-        } else {
-            .system(size: size, weight: run.attributes.bold ? .bold : defaultWeight, design: design)
-        }
+        let font = font(for: run, paragraphStyle: paragraphStyle)
 
         var text = Text(verbatim: run.text).font(font)
 
@@ -687,6 +697,8 @@ public struct PageView: View {
         }
         if let color = run.attributes.color {
             text = text.foregroundColor(color.swiftUIColor)
+        } else if paragraphStyle.textColor != ColorValue(red: 0, green: 0, blue: 0) {
+            text = text.foregroundColor(paragraphStyle.textColor.swiftUIColor)
         } else if run.attributes.link != nil {
             text = text.foregroundColor(.blue)
         }
@@ -768,15 +780,87 @@ public struct PageView: View {
         #endif
     }
 
-    private func headingSize(level: Int) -> CGFloat {
-        switch level {
-        case 1: 28
-        case 2: 24
-        case 3: 20
-        case 4: 18
-        case 5: 16
-        default: 15
+    private func font(
+        for run: TextRun,
+        paragraphStyle: ParagraphStyle
+    ) -> Font {
+        font(
+            family: run.attributes.fontFamily ?? paragraphStyle.fontFamily,
+            size: run.attributes.fontSize ?? paragraphStyle.fontSize,
+            weight: run.attributes.bold ? .bold : swiftUIFontWeight(paragraphStyle.fontWeight),
+            design: run.attributes.code ? .monospaced : fontDesign(for: paragraphStyle)
+        )
+    }
+
+    private func font(
+        for paragraphStyle: ParagraphStyle,
+        weightOverride: Font.Weight? = nil,
+        designOverride: Font.Design? = nil
+    ) -> Font {
+        font(
+            family: paragraphStyle.fontFamily,
+            size: paragraphStyle.fontSize,
+            weight: weightOverride ?? swiftUIFontWeight(paragraphStyle.fontWeight),
+            design: designOverride ?? fontDesign(for: paragraphStyle)
+        )
+    }
+
+    private func font(
+        family: String,
+        size: CGFloat,
+        weight: Font.Weight,
+        design: Font.Design
+    ) -> Font {
+        if !family.isEmpty {
+            return .custom(family, size: size)
         }
+        return .system(size: size, weight: weight, design: design)
+    }
+
+    private func fontDesign(for paragraphStyle: ParagraphStyle) -> Font.Design {
+        paragraphStyle.fontFamily.localizedCaseInsensitiveContains("mono") ? .monospaced : .default
+    }
+
+    private func swiftUIFontWeight(_ weight: FontWeight) -> Font.Weight {
+        switch weight {
+        case .ultraLight:
+            .ultraLight
+        case .thin:
+            .thin
+        case .light:
+            .light
+        case .regular:
+            .regular
+        case .medium:
+            .medium
+        case .semibold:
+            .semibold
+        case .bold:
+            .bold
+        case .heavy:
+            .heavy
+        case .black:
+            .black
+        }
+    }
+
+    private func scaledParagraphStyle(
+        from base: ParagraphStyle,
+        fontSize: CGFloat? = nil,
+        fontWeight: FontWeight? = nil,
+        textColor: ColorValue? = nil
+    ) -> ParagraphStyle {
+        ParagraphStyle(
+            fontFamily: base.fontFamily,
+            fontSize: fontSize ?? base.fontSize,
+            fontWeight: fontWeight ?? base.fontWeight,
+            lineSpacing: base.lineSpacing,
+            paragraphSpacing: base.paragraphSpacing,
+            alignment: base.alignment,
+            firstLineIndent: base.firstLineIndent,
+            indent: base.indent,
+            textColor: textColor ?? base.textColor
+        )
     }
 
     private func listPrefix(for style: RichTextPrimitive.ListStyle) -> String {
