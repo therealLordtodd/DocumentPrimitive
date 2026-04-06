@@ -689,6 +689,45 @@ struct DocumentModelTests {
     }
 
     @MainActor
+    @Test func originalViewScrollKeyUsesProjectedStructuralContext() {
+        let tracker = ChangeTracker(
+            currentAuthor: TrackChangesPrimitive.AuthorID(rawValue: "todd"),
+            isTracking: true
+        )
+        let state = DocumentEditorState(
+            document: Document(
+                title: "Draft",
+                sections: [
+                    DocumentSection(
+                        id: "section",
+                        blocks: [
+                            Block(id: "first", type: .paragraph, content: .text(.plain("First"))),
+                            Block(id: "second", type: .paragraph, content: .text(.plain("Second"))),
+                            Block(id: "third", type: .paragraph, content: .text(.plain("Third"))),
+                        ]
+                    ),
+                ]
+            ),
+            changeTracker: tracker
+        )
+
+        let source = state.dataSource(for: "section")
+        source.deleteBlocks(at: IndexSet(integer: 1))
+        let change = try! #require(tracker.changes.first)
+
+        tracker.showChanges = .original
+        state.focusChange(change.id)
+
+        let projectedPages = [
+            ComputedPage(sectionID: "section", pageNumber: 1, blockRanges: [BlockRange(startIndex: 0, endIndex: 0)]),
+            ComputedPage(sectionID: "section", pageNumber: 2, blockRanges: [BlockRange(startIndex: 1, endIndex: 1)]),
+            ComputedPage(sectionID: "section", pageNumber: 3, blockRanges: [BlockRange(startIndex: 2, endIndex: 2)]),
+        ]
+
+        #expect(state.currentPageScrollKey(in: projectedPages) == state.pageScrollKey(for: projectedPages[1]))
+    }
+
+    @MainActor
     @Test func pageScopedReviewNavigationTargetsVisibleAnchors() {
         let tracker = ChangeTracker(
             currentAuthor: TrackChangesPrimitive.AuthorID(rawValue: "todd"),

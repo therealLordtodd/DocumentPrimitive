@@ -1,4 +1,5 @@
 import Foundation
+import RichTextPrimitive
 import TrackChangesPrimitive
 
 struct DocumentReviewProjection {
@@ -40,7 +41,10 @@ extension DocumentEditorState {
     }
 
     func currentPageScrollKey(in pages: [ComputedPage]) -> String? {
-        resolvedCurrentPage(in: pages).map(pageScrollKey(for:))
+        if let projectedTarget = projectedReviewTargetPage(in: pages) {
+            return pageScrollKey(for: projectedTarget)
+        }
+        return resolvedCurrentPage(in: pages).map(pageScrollKey(for:))
     }
 
     private func projectedOriginalDocument() -> Document {
@@ -93,5 +97,68 @@ extension DocumentEditorState {
         }
 
         return pages.first(where: { $0.pageNumber == currentPage }) ?? pages.first
+    }
+
+    private func projectedReviewTargetPage(in pages: [ComputedPage]) -> ComputedPage? {
+        guard changeTracker.showChanges == .original,
+              let change = currentTrackedChange,
+              let context = trackedChangeContexts[change.id]
+        else {
+            return nil
+        }
+
+        let projectedDocument = projectedOriginalDocument()
+        let targetBlockIDs = projectedTargetBlockIDs(for: context, in: projectedDocument)
+        guard !targetBlockIDs.isEmpty else { return nil }
+
+        return pages.first { page in
+            page.sectionID == context.sectionID &&
+                pageContainsAnyBlock(page, blockIDs: targetBlockIDs, in: projectedDocument)
+        }
+    }
+
+    private func projectedTargetBlockIDs(
+        for context: TrackedChangeContext,
+        in document: Document
+    ) -> [BlockID] {
+        switch context.operation {
+        case let .replace(before, _):
+            return [before.id]
+        case let .delete(blocks, _):
+            return blocks.map(\.id)
+        case let .insert(_, index):
+            guard let section = document.section(context.sectionID) else { return [] }
+            if section.blocks.indices.contains(index) {
+                return [section.blocks[index].id]
+            }
+            if index > 0, section.blocks.indices.contains(index - 1) {
+                return [section.blocks[index - 1].id]
+            }
+            return section.blocks.first.map { [$0.id] } ?? []
+        }
+    }
+
+    private func pageContainsAnyBlock(
+        _ page: ComputedPage,
+        blockIDs: [BlockID],
+        in document: Document
+    ) -> Bool {
+        let targetIDs = Set(blockIDs)
+
+        if !page.blockPlacements.isEmpty {
+            let visibleIDs = Set(page.blockPlacements.map(\.blockID))
+            return !visibleIDs.isDisjoint(with: targetIDs)
+        }
+
+        guard let section = document.section(page.sectionID) else { return false }
+        for range in page.blockRanges {
+            for index in range.startIndex...range.endIndex where section.blocks.indices.contains(index) {
+                if targetIDs.contains(section.blocks[index].id) {
+                    return true
+                }
+            }
+        }
+
+        return false
     }
 }
