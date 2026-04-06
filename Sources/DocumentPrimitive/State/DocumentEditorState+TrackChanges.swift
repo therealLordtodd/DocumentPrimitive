@@ -15,6 +15,27 @@ extension DocumentEditorState {
         return changeTracker.visibleChanges.filter { visibleContentIDs.contains($0.anchor.blockID) }
     }
 
+    public var currentTrackedChange: TrackedChange? {
+        guard let currentTrackedChangeID else { return nil }
+        return changeTracker.visibleChanges.first(where: { $0.id == currentTrackedChangeID })
+            ?? changeTracker.changes.first(where: { $0.id == currentTrackedChangeID })
+    }
+
+    public var currentTrackedChangeSummary: String? {
+        guard let change = currentTrackedChange else { return nil }
+
+        switch change.type {
+        case let .insertion(text):
+            let preview = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            return preview.isEmpty ? "Insertion" : "Insert: \(String(preview.prefix(24)))"
+        case let .deletion(text):
+            let preview = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            return preview.isEmpty ? "Deletion" : "Delete: \(String(preview.prefix(24)))"
+        case .formatChange:
+            return "Formatting change"
+        }
+    }
+
     public func goToNextChange() {
         let visibleChanges = changeTracker.visibleChanges
         guard !visibleChanges.isEmpty else { return }
@@ -59,6 +80,32 @@ extension DocumentEditorState {
                 offset: change.anchor.offset
             )
         )
+    }
+
+    public func acceptCurrentChange() {
+        let visibleChanges = changeTracker.visibleChanges
+        guard !visibleChanges.isEmpty else { return }
+
+        let target = currentTrackedChange ?? visibleChanges.first!
+        let successor = successorChangeID(afterRemoving: target.id, from: visibleChanges)
+
+        acceptChange(target.id)
+        if let successor {
+            focusChange(successor)
+        }
+    }
+
+    public func rejectCurrentChange() {
+        let visibleChanges = changeTracker.visibleChanges
+        guard !visibleChanges.isEmpty else { return }
+
+        let target = currentTrackedChange ?? visibleChanges.first!
+        let successor = successorChangeID(afterRemoving: target.id, from: visibleChanges)
+
+        rejectChange(target.id)
+        if let successor {
+            focusChange(successor)
+        }
     }
 
     public func acceptChange(_ id: ChangeID) {
@@ -304,5 +351,22 @@ extension DocumentEditorState {
             count += 1
         }
         return count
+    }
+
+    private func successorChangeID(
+        afterRemoving id: ChangeID,
+        from visibleChanges: [TrackedChange]
+    ) -> ChangeID? {
+        guard let index = visibleChanges.firstIndex(where: { $0.id == id }) else {
+            return visibleChanges.first?.id
+        }
+
+        if index < visibleChanges.count - 1 {
+            return visibleChanges[index + 1].id
+        }
+        if index > 0 {
+            return visibleChanges[index - 1].id
+        }
+        return nil
     }
 }

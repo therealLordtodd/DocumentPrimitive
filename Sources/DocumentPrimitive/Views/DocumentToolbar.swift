@@ -81,7 +81,43 @@ public struct DocumentToolbar: View {
                 .buttonStyle(.borderless)
                 .disabled(changeCount == 0)
 
+                if let currentChangeSummary = state.currentTrackedChangeSummary {
+                    Text(currentChangeSummary)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .frame(minWidth: 110, maxWidth: 180, alignment: .leading)
+                }
+
+                Button {
+                    state.acceptCurrentChange()
+                } label: {
+                    Image(systemName: "checkmark.circle")
+                }
+                .buttonStyle(.borderless)
+                .disabled(state.currentTrackedChange == nil)
+
+                Button(role: .destructive) {
+                    state.rejectCurrentChange()
+                } label: {
+                    Image(systemName: "xmark.circle")
+                }
+                .buttonStyle(.borderless)
+                .disabled(state.currentTrackedChange == nil)
+
                 Menu {
+                    Button("Accept Current Change") {
+                        state.acceptCurrentChange()
+                    }
+                    .disabled(state.currentTrackedChange == nil)
+
+                    Button("Reject Current Change", role: .destructive) {
+                        state.rejectCurrentChange()
+                    }
+                    .disabled(state.currentTrackedChange == nil)
+
+                    Divider()
+
                     Button("Accept All Changes") {
                         state.acceptAllChanges()
                     }

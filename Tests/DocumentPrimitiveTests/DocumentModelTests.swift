@@ -425,6 +425,44 @@ struct DocumentModelTests {
     }
 
     @MainActor
+    @Test func acceptCurrentChangeAdvancesToNextTrackedChange() {
+        let tracker = ChangeTracker(
+            currentAuthor: TrackChangesPrimitive.AuthorID(rawValue: "todd"),
+            isTracking: true
+        )
+        let state = DocumentEditorState(
+            document: Document(
+                title: "Draft",
+                sections: [
+                    DocumentSection(
+                        id: "section",
+                        blocks: [Block(id: "body", type: .paragraph, content: .text(.plain("Hello")))]
+                    ),
+                ]
+            ),
+            changeTracker: tracker
+        )
+        let source = state.dataSource(for: "section")
+
+        source.updateTextContent(blockID: "body", content: .plain("Hello world"))
+        source.updateTextContent(
+            blockID: "body",
+            content: TextContent(runs: [TextRun(text: "Hello world", attributes: TextAttributes(bold: true))])
+        )
+
+        let firstChange = try! #require(tracker.changes.first)
+        let secondChange = try! #require(tracker.changes.last)
+        state.focusChange(firstChange.id)
+
+        state.acceptCurrentChange()
+
+        #expect(tracker.changes.count == 1)
+        #expect(tracker.changes.first?.id == secondChange.id)
+        #expect(state.currentTrackedChangeID == secondChange.id)
+        #expect(state.currentTrackedChangeSummary == "Formatting change")
+    }
+
+    @MainActor
     @Test func sectionAndPageDataSourcesBroadcastSharedMutations() {
         let document = Document(
             title: "Draft",
