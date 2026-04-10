@@ -1,3 +1,4 @@
+import HoverBadgePrimitive
 import BookmarkPrimitive
 import ColorPickerPrimitive
 import CommentPrimitive
@@ -507,50 +508,44 @@ public struct PageView: View {
                             Button {
                                 state.focusComment(comment.id)
                             } label: {
-                                reviewPill(
+                                DocumentReviewCountBadge(
                                     systemImage: isCurrentComment ? "text.bubble.fill" : "text.bubble",
                                     label: blockComments.count == 1 ? "1" : "\(blockComments.count)",
                                     tint: .orange
                                 )
                             }
                             .buttonStyle(.plain)
+                            .hoverBadge(
+                                commentHoverText(comment, count: blockComments.count),
+                                style: reviewHoverBadgeStyle(tint: .orange),
+                                position: .top,
+                                arrow: .bottom
+                            )
                         }
 
                         if let change = blockChanges.first {
                             Button {
                                 state.focusChange(change.id)
                             } label: {
-                                reviewPill(
+                                DocumentReviewCountBadge(
                                     systemImage: changeIcon(for: change),
                                     label: blockChanges.count == 1 ? "1" : "\(blockChanges.count)",
                                     tint: changeTint(for: change)
                                 )
                             }
                             .buttonStyle(.plain)
+                            .hoverBadge(
+                                changeHoverText(change, count: blockChanges.count),
+                                style: reviewHoverBadgeStyle(tint: changeTint(for: change)),
+                                position: .top,
+                                arrow: .bottom
+                            )
                         }
                     }
                     .padding(.top, 6)
                     .padding(.trailing, 4)
                 }
             }
-    }
-
-    private func reviewPill(
-        systemImage: String,
-        label: String,
-        tint: Color
-    ) -> some View {
-        Label(label, systemImage: systemImage)
-            .font(.caption2.weight(.semibold))
-            .foregroundStyle(tint)
-            .padding(.horizontal, 7)
-            .padding(.vertical, 4)
-            .background(.background.opacity(0.96))
-            .overlay {
-                Capsule()
-                    .stroke(tint.opacity(0.25), lineWidth: 1)
-            }
-            .clipShape(Capsule())
     }
 
     @ViewBuilder
@@ -1362,18 +1357,51 @@ public struct PageView: View {
     }
 
     private func annotationBadgeLabel(_ annotation: PageAnnotation) -> some View {
-        Label(annotation.title, systemImage: annotation.icon)
-            .font(.caption2.weight(.medium))
-            .foregroundStyle(annotation.tint)
-            .lineLimit(1)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 5)
-            .background(annotation.tint.opacity(0.1))
-            .clipShape(Capsule())
+        DocumentTintedBadge(
+            systemImage: annotation.icon,
+            text: annotation.title,
+            tint: annotation.tint
+        )
     }
 
     private func shouldShowReviewBadge(for placement: BlockFragmentPlacement) -> Bool {
         firstPlacementIDByBlockID[placement.blockID] == placement.id
+    }
+
+    private func commentHoverText(_ comment: Comment, count: Int) -> String {
+        let summary = comment.body
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "\n", with: " ")
+        let preview = summary.isEmpty ? "Untitled comment" : String(summary.prefix(96))
+        let prefix = count == 1 ? "Comment" : "\(count) comments"
+        return "\(prefix): \(preview)"
+    }
+
+    private func changeHoverText(_ change: TrackedChange, count: Int) -> String {
+        let summary = trackedChangeSummaryResolver.summary(
+            for: change,
+            context: state.trackedChangeContexts[change.id]
+        )
+        let prefix = count == 1 ? "Change" : "\(count) changes"
+        return "\(prefix): \(summary)"
+    }
+
+    private func reviewHoverBadgeStyle(tint: Color) -> HoverBadgeStyle {
+        HoverBadgeStyle(
+            backgroundColor: tint.opacity(0.16),
+            textColor: tint,
+            font: .caption,
+            horizontalPadding: 10,
+            verticalPadding: 6,
+            cornerStyle: .rounded(10),
+            borderColor: tint.opacity(0.2),
+            borderWidth: 1,
+            shadowColor: .clear,
+            shadowRadius: 0,
+            shadowY: 0,
+            animationDuration: 0.16,
+            offset: 8
+        )
     }
 
     private func reviewTint(

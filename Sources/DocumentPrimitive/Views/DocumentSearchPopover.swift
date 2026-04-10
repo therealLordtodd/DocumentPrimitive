@@ -133,7 +133,7 @@ struct DocumentSearchPopover: View {
                         Spacer(minLength: 0)
 
                         if let pageNumber = item.pageNumber {
-                            pageBadge(pageNumber)
+                            DocumentPageBadge(pageNumber: pageNumber)
                         }
                     }
 
@@ -150,9 +150,11 @@ struct DocumentSearchPopover: View {
                     }
 
                     HStack(spacing: 6) {
-                        metadataPill(item.statusLabel)
+                        DocumentMetadataBadge(text: item.statusLabel)
                         if let score = item.score {
-                            metadataPill("Score \(score.formatted(.number.precision(.fractionLength(1))))")
+                            DocumentMetadataBadge(
+                                text: "Score \(score.formatted(.number.precision(.fractionLength(1))))"
+                            )
                         }
                     }
                 }
@@ -182,30 +184,6 @@ struct DocumentSearchPopover: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .padding(.top, 12)
-    }
-
-    private func metadataPill(_ text: String) -> some View {
-        Text(text)
-            .font(.caption2.weight(.medium))
-            .foregroundStyle(.secondary)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(
-                Capsule()
-                    .fill(Color.secondary.opacity(0.12))
-            )
-    }
-
-    private func pageBadge(_ pageNumber: Int) -> some View {
-        Text("p.\(pageNumber)")
-            .font(.caption2.weight(.semibold))
-            .foregroundStyle(.secondary)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(
-                Capsule()
-                    .fill(Color.secondary.opacity(0.12))
-            )
     }
 
     private func refreshResults() async {
