@@ -1227,6 +1227,72 @@ struct DocumentModelTests {
     }
 
     @MainActor
+    @Test func enablingOddEvenHeaderFooterSeedsSeparateChromeFromPrimaryContent() {
+        let document = Document(
+            title: "Draft",
+            sections: [
+                DocumentSection(
+                    id: "section",
+                    blocks: [Block(id: "body", type: .paragraph, content: .text(.plain("Hello")))],
+                    headerFooter: HeaderFooterConfig(
+                        header: HeaderFooter(center: [TextRun(text: "Primary Header")]),
+                        footer: HeaderFooter(center: [TextRun(text: "Primary Footer")])
+                    )
+                ),
+            ]
+        )
+
+        let state = DocumentEditorState(document: document)
+
+        state.setCurrentSectionDifferentOddEven(true)
+
+        let config = state.document.section("section")?.headerFooter
+        #expect(config?.differentOddEven == true)
+        #expect(config?.evenHeader?.center.first?.text == "Primary Header")
+        #expect(config?.evenFooter?.center.first?.text == "Primary Footer")
+
+        state.setCurrentSectionDifferentOddEven(false)
+
+        let disabledConfig = state.document.section("section")?.headerFooter
+        #expect(disabledConfig?.differentOddEven == false)
+        #expect(disabledConfig?.evenHeader?.center.first?.text == "Primary Header")
+        #expect(disabledConfig?.evenFooter?.center.first?.text == "Primary Footer")
+    }
+
+    @MainActor
+    @Test func enablingFirstPageHeaderFooterSeedsSeparateChromeFromPrimaryContent() {
+        let document = Document(
+            title: "Draft",
+            sections: [
+                DocumentSection(
+                    id: "section",
+                    blocks: [Block(id: "body", type: .paragraph, content: .text(.plain("Hello")))],
+                    headerFooter: HeaderFooterConfig(
+                        header: HeaderFooter(center: [TextRun(text: "Default Header")]),
+                        footer: HeaderFooter(center: [TextRun(text: "Default Footer")])
+                    )
+                ),
+            ]
+        )
+
+        let state = DocumentEditorState(document: document)
+
+        state.setCurrentSectionDifferentFirstPage(true)
+
+        let config = state.document.section("section")?.headerFooter
+        #expect(config?.differentFirstPage == true)
+        #expect(config?.firstHeader?.center.first?.text == "Default Header")
+        #expect(config?.firstFooter?.center.first?.text == "Default Footer")
+
+        state.setCurrentSectionDifferentFirstPage(false)
+
+        let disabledConfig = state.document.section("section")?.headerFooter
+        #expect(disabledConfig?.differentFirstPage == false)
+        #expect(disabledConfig?.firstHeader?.center.first?.text == "Default Header")
+        #expect(disabledConfig?.firstFooter?.center.first?.text == "Default Footer")
+    }
+
+    @MainActor
     @Test func headerFooterInsertBlocksPreservesParagraphBreaks() {
         let state = DocumentEditorState(
             document: Document(

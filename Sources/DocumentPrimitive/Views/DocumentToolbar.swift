@@ -40,6 +40,26 @@ public struct DocumentToolbar: View {
             .menuStyle(.borderlessButton)
 
             Menu {
+                headerFooterOptionButton(
+                    "Different First Page",
+                    enabled: state.currentSectionUsesDifferentFirstPage
+                ) {
+                    state.setCurrentSectionDifferentFirstPage(!state.currentSectionUsesDifferentFirstPage)
+                }
+
+                headerFooterOptionButton(
+                    "Different Odd & Even",
+                    enabled: state.currentSectionUsesDifferentOddEven
+                ) {
+                    state.setCurrentSectionDifferentOddEven(!state.currentSectionUsesDifferentOddEven)
+                }
+            } label: {
+                Label(headerFooterLabel, systemImage: "doc.text")
+            }
+            .menuStyle(.borderlessButton)
+            .disabled(!state.canEditCurrentSectionHeaderFooterOptions)
+
+            Menu {
                 if let currentCommentSummary = state.currentCommentSummary {
                     Section("Current Comment") {
                         Text(currentCommentSummary)
@@ -201,6 +221,19 @@ public struct DocumentToolbar: View {
         state.reviewableTrackedChanges.count
     }
 
+    private var headerFooterLabel: String {
+        switch (state.currentSectionUsesDifferentFirstPage, state.currentSectionUsesDifferentOddEven) {
+        case (false, false):
+            "Headers"
+        case (true, false):
+            "Headers: First"
+        case (false, true):
+            "Headers: Odd/Even"
+        case (true, true):
+            "Headers: First + Odd/Even"
+        }
+    }
+
     private var changeVisibilityLabel: String {
         switch state.changeTracker.showChanges {
         case .showAll:
@@ -253,6 +286,22 @@ public struct DocumentToolbar: View {
             HStack {
                 Text(title)
                 if state.changeTracker.showChanges == visibility {
+                    Image(systemName: "checkmark")
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func headerFooterOptionButton(
+        _ title: String,
+        enabled: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack {
+                Text(title)
+                if enabled {
                     Image(systemName: "checkmark")
                 }
             }

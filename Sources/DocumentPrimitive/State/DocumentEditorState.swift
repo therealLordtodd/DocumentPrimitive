@@ -89,6 +89,25 @@ public final class DocumentEditorState {
         return index < layoutEngine.pages.count - 1
     }
 
+    public var currentSectionHeaderFooterConfig: HeaderFooterConfig {
+        guard let section = currentHeaderFooterSectionID.flatMap(document.section(_:)) else {
+            return HeaderFooterConfig()
+        }
+        return section.headerFooter ?? HeaderFooterConfig()
+    }
+
+    public var currentSectionUsesDifferentFirstPage: Bool {
+        currentSectionHeaderFooterConfig.differentFirstPage
+    }
+
+    public var currentSectionUsesDifferentOddEven: Bool {
+        currentSectionHeaderFooterConfig.differentOddEven
+    }
+
+    public var canEditCurrentSectionHeaderFooterOptions: Bool {
+        currentHeaderFooterSectionID != nil
+    }
+
     public func rulerSnapshot(for page: ComputedPage? = nil) -> DocumentRulerSnapshot {
         guard let context = rulerContext(for: page) else {
             return DocumentRulerSnapshot(
@@ -460,6 +479,25 @@ public final class DocumentEditorState {
         }
     }
 
+    private var currentHeaderFooterSectionID: SectionID? {
+        currentSection ?? document.sections.first?.id
+    }
+
+    private func applyHeaderFooterConfiguration(
+        _ config: HeaderFooterConfig,
+        toSectionAt index: Int,
+        sectionID: SectionID
+    ) {
+        document.sections[index].headerFooter = config
+        layoutEngine.document = document
+        layoutEngine.reflow()
+        pruneDerivedEditorStateCaches()
+        broadcastHeaderFooterMutation(for: sectionID)
+        syncCurrentLocationToSelection()
+        ensureCurrentPageExists()
+        refreshAnchoredStores()
+    }
+
     fileprivate func headerFooterRuns(
         for sectionID: SectionID,
         slot: HeaderFooterSlot
@@ -565,14 +603,49 @@ public final class DocumentEditorState {
             }
         }
 
-        document.sections[index].headerFooter = config
-        layoutEngine.document = document
-        layoutEngine.reflow()
-        pruneDerivedEditorStateCaches()
-        broadcastHeaderFooterMutation(for: sectionID)
-        syncCurrentLocationToSelection()
-        ensureCurrentPageExists()
-        refreshAnchoredStores()
+        applyHeaderFooterConfiguration(config, toSectionAt: index, sectionID: sectionID)
+    }
+
+    public func setCurrentSectionDifferentFirstPage(_ enabled: Bool) {
+        guard let sectionID = currentHeaderFooterSectionID,
+              let index = document.sectionIndex(sectionID) else {
+            return
+        }
+
+        var config = document.sections[index].headerFooter ?? HeaderFooterConfig()
+        config.differentFirstPage = enabled
+
+        if enabled {
+            if config.firstHeader == nil {
+                config.firstHeader = config.header
+            }
+            if config.firstFooter == nil {
+                config.firstFooter = config.footer
+            }
+        }
+
+        applyHeaderFooterConfiguration(config, toSectionAt: index, sectionID: sectionID)
+    }
+
+    public func setCurrentSectionDifferentOddEven(_ enabled: Bool) {
+        guard let sectionID = currentHeaderFooterSectionID,
+              let index = document.sectionIndex(sectionID) else {
+            return
+        }
+
+        var config = document.sections[index].headerFooter ?? HeaderFooterConfig()
+        config.differentOddEven = enabled
+
+        if enabled {
+            if config.evenHeader == nil {
+                config.evenHeader = config.header
+            }
+            if config.evenFooter == nil {
+                config.evenFooter = config.footer
+            }
+        }
+
+        applyHeaderFooterConfiguration(config, toSectionAt: index, sectionID: sectionID)
     }
 
     public func goToPreviousPage() {
