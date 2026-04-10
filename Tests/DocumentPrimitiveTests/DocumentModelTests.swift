@@ -1,6 +1,8 @@
 import BookmarkPrimitive
 import CommentPrimitive
 import Foundation
+import RulerPrimitive
+import SwiftUI
 import Testing
 import TrackChangesPrimitive
 @testable import DocumentPrimitive
@@ -18,6 +20,60 @@ struct DocumentModelTests {
         let widths = layout.resolvedWidths(totalWidth: 300)
         #expect(widths.count == 3)
         #expect(widths[0] == widths[1])
+    }
+
+    @MainActor
+    @Test func rulerSnapshotUsesSectionMarginsAndColumnGuides() {
+        let document = Document(
+            title: "Ruler",
+            sections: [
+                DocumentSection(
+                    id: "section",
+                    blocks: [Block(id: "body", type: .paragraph, content: .text(.plain("Body")))],
+                    pageSetup: PageSetup(
+                        pageSize: .custom(width: 600, height: 800),
+                        margins: EdgeInsets(top: 50, leading: 60, bottom: 50, trailing: 80)
+                    ),
+                    columnLayout: ColumnLayout(columns: 2, spacing: 20)
+                ),
+            ]
+        )
+        let state = DocumentEditorState(document: document)
+
+        let snapshot = state.rulerSnapshot()
+
+        #expect(snapshot.configuration.unit == .inches)
+        #expect(snapshot.configuration.length == 600)
+        #expect(snapshot.marker(ofType: .leftMargin)?.position == 60)
+        #expect(snapshot.marker(ofType: .rightMargin)?.position == 520)
+        #expect(snapshot.marker(ofType: .columnGuide)?.position == 290)
+    }
+
+    @MainActor
+    @Test func movingRulerMarginUpdatesCurrentSectionPageSetup() {
+        let document = Document(
+            title: "Ruler",
+            sections: [
+                DocumentSection(
+                    id: "section",
+                    blocks: [Block(id: "body", type: .paragraph, content: .text(.plain("Body")))],
+                    pageSetup: PageSetup(
+                        pageSize: .custom(width: 600, height: 800),
+                        margins: EdgeInsets(top: 50, leading: 60, bottom: 50, trailing: 80)
+                    )
+                ),
+            ]
+        )
+        let state = DocumentEditorState(document: document)
+
+        state.moveRulerMarker(.leftMargin, to: 90)
+        state.moveRulerMarker(.rightMargin, to: 500)
+
+        let setup = state.document.section("section")?.pageSetup
+        #expect(setup?.margins.leading == 90)
+        #expect(setup?.margins.trailing == 100)
+        #expect(state.layoutEngine.pages.first?.template.margins.leading == 90)
+        #expect(state.layoutEngine.pages.first?.template.margins.trailing == 100)
     }
 
     @Test func listDefinitionFormatRendering() {

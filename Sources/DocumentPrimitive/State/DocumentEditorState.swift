@@ -2,7 +2,9 @@ import BookmarkPrimitive
 import CommentPrimitive
 import Foundation
 import Observation
+import PaginationPrimitive
 import RichTextPrimitive
+import RulerPrimitive
 import TrackChangesPrimitive
 
 @MainActor
@@ -85,6 +87,57 @@ public final class DocumentEditorState {
     public var canGoToNextPage: Bool {
         guard let index = currentPageIndex() else { return false }
         return index < layoutEngine.pages.count - 1
+    }
+
+    public func rulerSnapshot(for page: ComputedPage? = nil) -> DocumentRulerSnapshot {
+        guard let context = rulerContext(for: page) else {
+            return DocumentRulerSnapshot(
+                configuration: RulerConfiguration(),
+                markers: []
+            )
+        }
+
+        return DocumentRulerSnapshot(
+            configuration: RulerConfiguration(
+                unit: .inches,
+                origin: 0,
+                length: context.template.size.width,
+                subdivisions: 8
+            ),
+            markers: rulerMarkers(for: context)
+        )
+    }
+
+    public func moveRulerMarker(
+        _ markerType: RulerMarkerType,
+        to position: CGFloat,
+        on page: ComputedPage? = nil
+    ) {
+        guard let context = rulerContext(for: page) else { return }
+
+        var pageSetup = context.pageSetup
+        var margins = pageSetup.margins
+        let pageWidth = pageSetup.canvasSize.width
+        let minimumContentWidth: CGFloat = 144
+
+        switch markerType {
+        case .leftMargin:
+            let rightMarginPosition = pageWidth - margins.trailing
+            margins.leading = min(
+                max(position, 0),
+                max(rightMarginPosition - minimumContentWidth, 0)
+            )
+        case .rightMargin:
+            let minimumRightMarkerPosition = min(margins.leading + minimumContentWidth, pageWidth)
+            let markerPosition = min(max(position, minimumRightMarkerPosition), pageWidth)
+            margins.trailing = max(pageWidth - markerPosition, 0)
+        default:
+            return
+        }
+
+        pageSetup.margins = margins
+        document.sections[context.sectionIndex].pageSetup = pageSetup
+        refreshLayoutAfterGeometryChange()
     }
 
     public func dataSource(for sectionID: SectionID) -> SectionDataSource {
@@ -245,6 +298,145 @@ public final class DocumentEditorState {
         syncCurrentLocationToSelection()
         ensureCurrentPageExists()
         refreshAnchoredStores()
+    }
+
+    private func refreshLayoutAfterGeometryChange() {
+        layoutEngine.document = document
+        layoutEngine.reflow()
+        pruneDerivedEditorStateCaches()
+        syncCurrentLocationToSelection()
+        ensureCurrentPageExists()
+        refreshAnchoredStores()
+    }
+
+    private func rulerContext(for page: ComputedPage?) -> DocumentRulerContext? {
+        let sectionID = page?.sectionID ?? currentSection ?? document.sections.first?.id
+        guard let sectionID,
+              let sectionIndex = document.sectionIndex(sectionID) else { return nil }
+
+        let section = document.sections[sectionIndex]
+        let pageSetup = section.pageSetup ?? document.settings.defaultPageSetup
+        let columnLayout = section.columnLayout ?? .single
+        let template = page?.template ?? pageSetup.pageTemplate(
+            columns: columnLayout.columns,
+            columnSpacing: columnLayout.spacing
+        )
+
+        return DocumentRulerContext(
+            sectionIndex: sectionIndex,
+            section: section,
+            pageSetup: pageSetup,
+            columnLayout: columnLayout,
+            template: template
+        )
+    }
+
+    private func rulerMarkers(for context: DocumentRulerContext) -> [RulerMarkerItem] {
+        var markers: [RulerMarkerItem] = [
+            RulerMarkerItem(
+                id: DocumentRulerMarkerID.leftMargin,
+                position: context.template.margins.leading,
+                markerType: .leftMargin
+            ),
+            RulerMarkerItem(
+                id: DocumentRulerMarkerID.rightMargin,
+                position: context.template.size.width - context.template.margins.trailing,
+                markerType: .rightMargin
+            ),
+        ]
+
+        markers.append(contentsOf: columnGuideMarkers(for: context))
+
+        if let focusedBlock = focusedBlockForRuler(in: context.section.id) {
+            markers.append(contentsOf: indentMarkers(for: focusedBlock, contentStart: context.template.margins.leading))
+        }
+
+        return markers.sorted { lhs, rhs in
+            if lhs.position == rhs.position {
+                return markerSortRank(lhs.markerType) < markerSortRank(rhs.markerType)
+            }
+            return lhs.position < rhs.position
+        }
+    }
+
+    private func columnGuideMarkers(for context: DocumentRulerContext) -> [RulerMarkerItem] {
+        guard context.columnLayout.columns > 1 else { return [] }
+
+        let widths = context.columnLayout.resolvedWidths(totalWidth: context.template.contentWidth)
+        guard widths.count > 1 else { return [] }
+
+        var markers: [RulerMarkerItem] = []
+        var guidePosition = context.template.margins.leading
+        for index in widths.indices.dropLast() {
+            guidePosition += widths[index] + (context.template.columnSpacing / 2)
+            markers.append(
+                RulerMarkerItem(
+                    id: DocumentRulerMarkerID.columnGuide(index),
+                    position: guidePosition,
+                    markerType: .columnGuide,
+                    isDraggable: false
+                )
+            )
+            guidePosition += context.template.columnSpacing / 2
+        }
+        return markers
+    }
+
+    private func focusedBlockForRuler(in sectionID: SectionID) -> Block? {
+        let blockID = activeEditorRichTextState?.focusedBlockID ?? richTextState.focusedBlockID
+        guard let blockID else { return nil }
+        return block(in: sectionID, id: blockID)
+    }
+
+    private func indentMarkers(
+        for block: Block,
+        contentStart: CGFloat
+    ) -> [RulerMarkerItem] {
+        let paragraphStyle = document.styles.textStyleSheet().style(for: block)
+        var markers: [RulerMarkerItem] = []
+
+        if paragraphStyle.firstLineIndent != 0 {
+            markers.append(
+                RulerMarkerItem(
+                    id: DocumentRulerMarkerID.firstLineIndent,
+                    position: contentStart + paragraphStyle.firstLineIndent,
+                    markerType: .firstLineIndent,
+                    isDraggable: false
+                )
+            )
+        }
+
+        if paragraphStyle.indent != 0 {
+            markers.append(
+                RulerMarkerItem(
+                    id: DocumentRulerMarkerID.hangingIndent,
+                    position: contentStart + paragraphStyle.indent,
+                    markerType: .hangingIndent,
+                    isDraggable: false
+                )
+            )
+        }
+
+        return markers
+    }
+
+    private func markerSortRank(_ markerType: RulerMarkerType) -> Int {
+        switch markerType {
+        case .leftMargin:
+            0
+        case .firstLineIndent:
+            1
+        case .hangingIndent:
+            2
+        case .tabStop:
+            3
+        case .columnGuide:
+            4
+        case .rightMargin:
+            5
+        case .custom:
+            6
+        }
     }
 
     fileprivate func headerFooterRuns(
@@ -1661,6 +1853,26 @@ public final class HeaderFooterDataSource: RichTextDataSource {
 
     fileprivate func emitExternalMutation(_ mutation: RichTextMutation) {
         notify(mutation)
+    }
+}
+
+private struct DocumentRulerContext {
+    var sectionIndex: Int
+    var section: DocumentSection
+    var pageSetup: PageSetup
+    var columnLayout: ColumnLayout
+    var template: PageTemplate
+}
+
+private enum DocumentRulerMarkerID {
+    static let leftMargin = UUID(uuidString: "00000000-0000-0000-0000-000000000001")!
+    static let rightMargin = UUID(uuidString: "00000000-0000-0000-0000-000000000002")!
+    static let firstLineIndent = UUID(uuidString: "00000000-0000-0000-0000-000000000003")!
+    static let hangingIndent = UUID(uuidString: "00000000-0000-0000-0000-000000000004")!
+
+    static func columnGuide(_ index: Int) -> UUID {
+        let suffix = String(format: "%012d", max(index, 0) + 100)
+        return UUID(uuidString: "00000000-0000-0000-0000-\(suffix)")!
     }
 }
 

@@ -1,4 +1,5 @@
 import RichTextPrimitive
+import RulerPrimitive
 import SwiftUI
 
 public struct DocumentEditor: View {
@@ -72,29 +73,141 @@ public struct DocumentEditor: View {
     }
 
     private var rulerView: some View {
-        GeometryReader { proxy in
-            let width = proxy.size.width
-            let tickCount = max(Int(width / 24), 1)
+        DocumentRulerView(snapshot: state.rulerSnapshot()) { marker, position in
+            state.moveRulerMarker(marker.markerType, to: position)
+        }
+    }
+}
 
-            HStack(spacing: 0) {
-                ForEach(0...tickCount, id: \.self) { index in
-                    VStack(spacing: 2) {
-                        Rectangle()
-                            .fill(index.isMultiple(of: 4) ? Color.secondary : Color.secondary.opacity(0.5))
-                            .frame(width: 1, height: index.isMultiple(of: 4) ? 14 : 8)
-                        if index < tickCount, index.isMultiple(of: 4) {
-                            Text("\(index / 4)")
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .frame(maxWidth: .infinity)
+private struct DocumentRulerView: View {
+    let snapshot: DocumentRulerSnapshot
+    let onMoveMarker: (RulerMarkerItem, CGFloat) -> Void
+
+    var body: some View {
+        GeometryReader { proxy in
+            let scale = proxy.size.width / max(snapshot.configuration.length, 1)
+
+            ZStack(alignment: .topLeading) {
+                ForEach(ticks(width: proxy.size.width, scale: scale)) { tick in
+                    tickView(tick)
+                }
+
+                ForEach(snapshot.markers) { marker in
+                    markerView(marker, scale: scale, width: proxy.size.width)
                 }
             }
-            .padding(.horizontal, 20)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
-        .frame(height: 28)
+        .frame(height: 34)
         .background(Color.secondary.opacity(0.08))
     }
+
+    private func tickView(_ tick: RulerTick) -> some View {
+        VStack(spacing: 1) {
+            Rectangle()
+                .fill(tick.isMajor ? Color.secondary : Color.secondary.opacity(0.45))
+                .frame(width: 1, height: tick.isMajor ? 14 : 8)
+
+            if let label = tick.label {
+                Text(label)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .fixedSize()
+            }
+        }
+        .position(x: tick.x, y: tick.isMajor ? 14 : 7)
+    }
+
+    private func markerView(
+        _ marker: RulerMarkerItem,
+        scale: CGFloat,
+        width: CGFloat
+    ) -> some View {
+        let x = min(max(marker.position * scale, 0), width)
+
+        return Image(systemName: icon(for: marker.markerType))
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(marker.isDraggable ? Color.accentColor : Color.secondary)
+            .padding(3)
+            .background(.thinMaterial, in: Capsule())
+            .overlay(
+                Capsule()
+                    .strokeBorder(Color.secondary.opacity(0.25), lineWidth: 0.5)
+            )
+            .position(x: x, y: 24)
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { value in
+                        guard marker.isDraggable, scale > 0 else { return }
+                        onMoveMarker(marker, (x + value.translation.width) / scale)
+                    }
+            )
+            .accessibilityLabel(label(for: marker.markerType))
+    }
+
+    private func ticks(width: CGFloat, scale: CGFloat) -> [RulerTick] {
+        let configuration = snapshot.configuration
+        let totalUnits = max(Int(ceil(configuration.pointsToUnit(configuration.length))), 1)
+        let tickCount = totalUnits * configuration.subdivisions
+
+        return (0...tickCount).compactMap { index in
+            let unitValue = CGFloat(index) / CGFloat(configuration.subdivisions)
+            let position = configuration.unitToPoints(unitValue)
+            let x = position * scale
+            guard x >= 0, x <= width else { return nil }
+
+            let isMajor = index.isMultiple(of: configuration.subdivisions)
+            return RulerTick(
+                id: index,
+                x: x,
+                isMajor: isMajor,
+                label: isMajor ? "\(Int(unitValue))\(configuration.unit.abbreviation)" : nil
+            )
+        }
+    }
+
+    private func icon(for markerType: RulerMarkerType) -> String {
+        switch markerType {
+        case .leftMargin:
+            "arrowtriangle.right.fill"
+        case .rightMargin:
+            "arrowtriangle.left.fill"
+        case .firstLineIndent:
+            "arrowtriangle.down.fill"
+        case .hangingIndent:
+            "arrowtriangle.up.fill"
+        case .tabStop:
+            "t.square"
+        case .columnGuide:
+            "rectangle.split.3x1"
+        case .custom:
+            "diamond.fill"
+        }
+    }
+
+    private func label(for markerType: RulerMarkerType) -> String {
+        switch markerType {
+        case .leftMargin:
+            "Left margin"
+        case .rightMargin:
+            "Right margin"
+        case .firstLineIndent:
+            "First line indent"
+        case .hangingIndent:
+            "Hanging indent"
+        case let .tabStop(alignment):
+            "\(alignment.rawValue.capitalized) tab stop"
+        case .columnGuide:
+            "Column guide"
+        case let .custom(label):
+            label
+        }
+    }
+}
+
+private struct RulerTick: Identifiable {
+    let id: Int
+    let x: CGFloat
+    let isMajor: Bool
+    let label: String?
 }

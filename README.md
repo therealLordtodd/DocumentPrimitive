@@ -71,6 +71,10 @@ Layout, TOC generation, export, and preview should read the document model direc
 
 `HeaderFooterConfig` supports separate first-page, primary odd-page, and even-page headers and footers. `HeaderFooterSlot` exposes left, center, and right editable slots for each variant, including `evenHeaderLeft`, `evenHeaderCenter`, `evenHeaderRight`, `evenFooterLeft`, `evenFooterCenter`, and `evenFooterRight`.
 
+## Ruler Integration
+
+`DocumentEditor` derives its ruler from `RulerPrimitive` via `DocumentRulerSnapshot`. The snapshot reflects the active section's page width, margins, column guides, and focused-block indent markers; dragging the left or right margin marker writes a section-specific `PageSetup` and reflows the layout.
+
 ## Export
 
 ```swift
