@@ -54,7 +54,8 @@ public struct DocumentEditor: View {
                                 RichTextEditor(
                                     state: sectionEditorState,
                                     dataSource: state.dataSource(for: section.id),
-                                    styleSheet: styleSheet
+                                    styleSheet: styleSheet,
+                                    showsBlockNavigator: true
                                 )
                                 .frame(minHeight: 220)
                                 .padding()
