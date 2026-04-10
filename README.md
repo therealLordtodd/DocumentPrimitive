@@ -1,10 +1,11 @@
 # DocumentPrimitive
 
-DocumentPrimitive provides a word-processor document layer on top of `RichTextPrimitive`. It adds sections, pages, columns, headers and footers, footnotes, TOC/list/field services, print preview, document-level editor state, export mapping, and optional GridPrimitive table editing.
+DocumentPrimitive provides a word-processor document layer on top of `RichTextPrimitive`. It adds sections, pages, columns, headers and footers, footnotes, TOC/list/field services, print preview, document-level editor state, export mapping, optional preview integration, and optional GridPrimitive table editing.
 
 ## Products
 - `DocumentPrimitive`: Cross-platform core document model, services, layout, state, and views.
 - `DocumentPrimitiveExport`: Markdown, HTML, and PDF exporters using `ExportKit`.
+- `DocumentPrimitivePreview`: Attachment and gallery rendering built on `PreviewPrimitive`.
 - `DocumentPrimitiveGrid`: Conditional advanced table editing integration for hosts that can import GridPrimitive.
 
 ## Quick Start
@@ -53,6 +54,7 @@ struct DocumentHost: View {
 - `TOCGenerator`, `FootnoteManager`, `ListNumberingEngine`, and `FieldCodeResolver`: Document services.
 - `DocumentEditor`, `PageView`, `PrintPreview`, and `DocumentToolbar`: SwiftUI views.
 - `BlockToExportMapper`, `MarkdownExporter`, `HTMLExporter`, and `PDFExporter`: Export implementation surface.
+- `DocumentPreviewAttachmentResolver`, `DocumentAttachmentPreview`, and `DocumentAttachmentGallery`: Optional preview-focused document attachment surface.
 - `GridDocumentEditor`, `GridPrintPreview`, `GridTableAdapter`, and `GridTableEditor`: Optional grid table integration.
 
 ## Source Of Truth
@@ -90,6 +92,18 @@ let data = try await MarkdownExporter().export(exportDocument, options: ExportOp
 ```
 
 Use `BlockToExportMapper` to convert a `Document` into `ExportableDocument`. The exporters preserve sections, page metrics, field codes, headers/footers, footnotes, tables, images, and inline text attributes supported by `ExportKit`.
+
+## Preview Integration
+
+```swift
+import DocumentPrimitive
+import DocumentPrimitivePreview
+
+let attachments = DocumentPreviewAttachmentResolver().attachments(in: document)
+let gallery = DocumentAttachmentGallery(attachments: attachments)
+```
+
+Use `DocumentPrimitivePreview` when a host wants preview-backed handling for image, file, and embed-style blocks without adding `PreviewPrimitive` directly to the core editor dependency surface.
 
 ## Testing
 
