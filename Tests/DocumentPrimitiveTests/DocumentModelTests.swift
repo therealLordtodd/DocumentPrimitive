@@ -1717,4 +1717,57 @@ struct DocumentModelTests {
         #expect(resolvedBlock == updatedBlock)
         #expect(state.document.section("section")?.blocks.first == updatedBlock)
     }
+
+    @MainActor
+    @Test func moveSectionsReordersDocumentAndPreservesFocusedSection() {
+        let document = Document(
+            title: "Sections",
+            sections: [
+                DocumentSection(
+                    id: "one",
+                    blocks: [Block(id: "one-body", type: .paragraph, content: .text(.plain("One")))]
+                ),
+                DocumentSection(
+                    id: "two",
+                    blocks: [Block(id: "two-body", type: .paragraph, content: .text(.plain("Two")))]
+                ),
+            ]
+        )
+
+        let state = DocumentEditorState(document: document)
+        state.richTextState.selection = .caret("two-body", offset: 0)
+        state.richTextState.focusedBlockID = "two-body"
+        state.syncCurrentLocation(using: state.richTextState)
+
+        state.moveSections(from: IndexSet(integer: 1), to: 0)
+
+        #expect(state.document.sections.map(\.id.rawValue) == ["two", "one"])
+        #expect(state.currentSection == "two")
+        #expect(state.layoutEngine.pages.first?.sectionID == "two")
+    }
+
+    @MainActor
+    @Test func replaceSectionsUpdatesDocumentOrder() {
+        let originalSections = [
+            DocumentSection(
+                id: "alpha",
+                blocks: [Block(id: "alpha-body", type: .paragraph, content: .text(.plain("Alpha")))]
+            ),
+            DocumentSection(
+                id: "beta",
+                blocks: [Block(id: "beta-body", type: .paragraph, content: .text(.plain("Beta")))]
+            ),
+        ]
+        let state = DocumentEditorState(
+            document: Document(
+                title: "Order",
+                sections: originalSections
+            )
+        )
+
+        state.replaceSections(originalSections.reversed())
+
+        #expect(state.document.sections.map(\.id.rawValue) == ["beta", "alpha"])
+        #expect(state.layoutEngine.pages.first?.sectionID == "beta")
+    }
 }

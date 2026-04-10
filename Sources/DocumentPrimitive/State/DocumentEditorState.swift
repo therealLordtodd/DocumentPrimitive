@@ -284,6 +284,27 @@ public final class DocumentEditorState {
         updateSectionBlocks(updated, for: sectionID)
     }
 
+    public func replaceSections(_ sections: [DocumentSection]) {
+        var updatedDocument = document
+        updatedDocument.sections = sections
+        document = updatedDocument
+    }
+
+    public func moveSections(from source: IndexSet, to destination: Int) {
+        var reordered = document.sections
+        let movingSections = source.sorted().compactMap { index in
+            reordered.indices.contains(index) ? reordered[index] : nil
+        }
+
+        for index in source.sorted(by: >) where reordered.indices.contains(index) {
+            reordered.remove(at: index)
+        }
+
+        let insertionIndex = min(max(destination, 0), reordered.count)
+        reordered.insert(contentsOf: movingSections, at: insertionIndex)
+        replaceSections(reordered)
+    }
+
     func blocks(for sectionID: SectionID) -> [Block] {
         document.section(sectionID)?.blocks ?? []
     }

@@ -1,3 +1,4 @@
+import DragAndDropPrimitive
 import RichTextPrimitive
 import RulerPrimitive
 import SwiftUI
@@ -47,24 +48,29 @@ public struct DocumentEditor: View {
                     VStack(spacing: 20) {
                         ForEach(state.document.sections) { section in
                             let sectionEditorState = state.richTextState(forSection: section.id)
-                            RichTextEditor(
-                                state: sectionEditorState,
-                                dataSource: state.dataSource(for: section.id),
-                                styleSheet: styleSheet
-                            )
-                            .frame(minHeight: 220)
-                            .padding()
-                            .background(.background)
-                            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                            .shadow(color: .black.opacity(0.05), radius: 12, y: 6)
-                            .onChange(of: sectionEditorState.selection) { _, _ in
-                                state.syncCurrentLocation(using: sectionEditorState)
-                            }
-                            .onChange(of: sectionEditorState.focusedBlockID) { _, _ in
-                                state.syncCurrentLocation(using: sectionEditorState)
+                            HStack(alignment: .top, spacing: 12) {
+                                SectionReorderHandle(section: section)
+
+                                RichTextEditor(
+                                    state: sectionEditorState,
+                                    dataSource: state.dataSource(for: section.id),
+                                    styleSheet: styleSheet
+                                )
+                                .frame(minHeight: 220)
+                                .padding()
+                                .background(.background)
+                                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                                .shadow(color: .black.opacity(0.05), radius: 12, y: 6)
+                                .onChange(of: sectionEditorState.selection) { _, _ in
+                                    state.syncCurrentLocation(using: sectionEditorState)
+                                }
+                                .onChange(of: sectionEditorState.focusedBlockID) { _, _ in
+                                    state.syncCurrentLocation(using: sectionEditorState)
+                                }
                             }
                         }
                     }
+                    .reorderable(items: sectionBinding) { _ in }
                     .padding(24)
                 }
                 .background(Color.secondary.opacity(0.05))
@@ -76,6 +82,35 @@ public struct DocumentEditor: View {
         DocumentRulerView(snapshot: state.rulerSnapshot()) { marker, position in
             state.moveRulerMarker(marker.markerType, to: position)
         }
+    }
+
+    private var sectionBinding: Binding<[DocumentSection]> {
+        Binding(
+            get: { state.document.sections },
+            set: { state.replaceSections($0) }
+        )
+    }
+}
+
+private struct SectionReorderHandle: View {
+    let section: DocumentSection
+
+    var body: some View {
+        Image(systemName: "line.3.horizontal")
+            .font(.body.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 12)
+            .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .vantageDraggable(
+                DragItem(
+                    content: section.id.rawValue,
+                    previewLabel: "Section",
+                    sourceID: DragDropID(section.id.rawValue)
+                )
+            )
+            .accessibilityLabel("Reorder section")
+            .accessibilityHint("Drag to move this section within the document")
     }
 }
 

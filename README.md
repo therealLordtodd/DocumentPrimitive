@@ -75,6 +75,10 @@ Layout, TOC generation, export, and preview should read the document model direc
 
 `DocumentEditor` derives its ruler from `RulerPrimitive` via `DocumentRulerSnapshot`. The snapshot reflects the active section's page width, margins, column guides, and focused-block indent markers; dragging the left or right margin marker writes a section-specific `PageSetup` and reflows the layout.
 
+## Section Reordering
+
+In continuous and canvas modes, `DocumentEditor` exposes a dedicated drag handle for each section. The handle uses `DragAndDropPrimitive` while `DocumentEditorState.moveSections(from:to:)` updates the authoritative `document.sections` array and reflows pagination.
+
 ## Export
 
 ```swift
