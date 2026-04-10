@@ -1,5 +1,6 @@
 import BookmarkPrimitive
 import CommentPrimitive
+import FilterPrimitive
 import Foundation
 import RulerPrimitive
 import SwiftUI
@@ -1835,5 +1836,97 @@ struct DocumentModelTests {
 
         #expect(state.document.sections.map(\.id.rawValue) == ["beta", "alpha"])
         #expect(state.layoutEngine.pages.first?.sectionID == "beta")
+    }
+
+    @MainActor
+    @Test func reviewNavigatorIndexesBookmarksCommentsAndChangesInDocumentOrder() {
+        let state = DocumentEditorState(
+            document: Document(
+                title: "Review",
+                sections: [
+                    DocumentSection(
+                        id: "section",
+                        blocks: [
+                            Block(id: "intro", type: .heading, content: .heading(.plain("Intro"), level: 1)),
+                            Block(id: "body", type: .paragraph, content: .text(.plain("Body copy for review"))),
+                            Block(id: "tail", type: .paragraph, content: .text(.plain("Tail copy"))),
+                        ]
+                    ),
+                ]
+            ),
+            changeTracker: ChangeTracker(currentAuthor: "todd", isTracking: true)
+        )
+
+        state.addBookmark(named: "Tail Marker", for: "tail")
+        state.richTextState.selection = .range(
+            start: TextPosition(blockID: "body", offset: 0),
+            end: TextPosition(blockID: "body", offset: 4)
+        )
+        let comment = try! #require(state.addComment(body: "Review body copy", authorID: "reviewer"))
+        state.changeTracker.recordInsertion(
+            anchor: ChangeAnchor(blockID: "tail", offset: 2, length: 3),
+            text: "new"
+        )
+
+        let items = state.reviewNavigatorItems
+
+        #expect(items.map(\.kindRawValue) == ["bookmark", "comment", "bookmark", "change"])
+        #expect(items.map(\.title) == ["Intro", "Review body copy", "Tail Marker", "Insert: new"])
+        #expect(items.first?.bookmarkType == "automatic")
+        #expect(items[1].sourceID == comment.id.rawValue)
+        #expect(items[3].changeType == "insertion")
+        #expect(items.allSatisfy { $0.pageNumber == 1 })
+    }
+
+    @MainActor
+    @Test func reviewNavigatorQuickFiltersNarrowOpenCommentsAndCurrentPage() {
+        let longText = String(repeating: "Page filler ", count: 2500)
+        let state = DocumentEditorState(
+            document: Document(
+                title: "Review",
+                sections: [
+                    DocumentSection(
+                        id: "section",
+                        blocks: [
+                            Block(id: "lead", type: .paragraph, content: .text(.plain(longText))),
+                            Block(id: "tail", type: .paragraph, content: .text(.plain("Tail review note"))),
+                        ]
+                    ),
+                ]
+            )
+        )
+
+        state.richTextState.selection = .range(
+            start: TextPosition(blockID: "lead", offset: 0),
+            end: TextPosition(blockID: "lead", offset: 4)
+        )
+        let openComment = try! #require(state.addComment(body: "Lead comment", authorID: "reviewer"))
+
+        state.richTextState.selection = .range(
+            start: TextPosition(blockID: "tail", offset: 0),
+            end: TextPosition(blockID: "tail", offset: 4)
+        )
+        let resolvedComment = try! #require(state.addComment(body: "Tail comment", authorID: "reviewer"))
+        state.commentStore.resolve(resolvedComment.id)
+        state.addBookmark(named: "Tail Marker", for: "tail")
+
+        let openCommentsFilter = try! #require(
+            state.reviewNavigatorQuickFilters.first(where: { $0.name == "Open Comments" })?.filter
+        )
+        state.reviewFilterConfiguration = FilterConfiguration(filter: openCommentsFilter)
+
+        #expect(state.filteredReviewNavigatorItems.map(\.sourceID) == [openComment.id.rawValue])
+
+        let tailPage = try! #require(state.layoutEngine.pageNumber(for: "tail"))
+        state.currentPage = tailPage
+        let thisPageFilter = try! #require(
+            state.reviewNavigatorQuickFilters.first(where: { $0.name == "This Page" })?.filter
+        )
+        state.reviewFilterConfiguration = FilterConfiguration(filter: thisPageFilter)
+
+        let pageItems = state.filteredReviewNavigatorItems
+        #expect(pageItems.allSatisfy { $0.pageNumber == tailPage })
+        #expect(pageItems.map(\.sourceID).contains(resolvedComment.id.rawValue))
+        #expect(pageItems.map(\.kindRawValue).contains("bookmark"))
     }
 }

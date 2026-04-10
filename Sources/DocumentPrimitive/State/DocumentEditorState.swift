@@ -1,5 +1,6 @@
 import BookmarkPrimitive
 import CommentPrimitive
+import FilterPrimitive
 import Foundation
 import Observation
 import PaginationPrimitive
@@ -31,6 +32,7 @@ public final class DocumentEditorState {
     public var currentPage: Int
     public var currentSection: SectionID?
     public var currentTrackedChangeID: ChangeID?
+    public var reviewFilterConfiguration: FilterConfiguration
     public let bookmarkStore: BookmarkStore
     public let commentStore: CommentStore
     public let changeTracker: ChangeTracker
@@ -57,6 +59,7 @@ public final class DocumentEditorState {
         showFormatting: Bool = true,
         currentPage: Int = 1,
         currentSection: SectionID? = nil,
+        reviewFilterConfiguration: FilterConfiguration = FilterConfiguration(),
         bookmarkStore: BookmarkStore = BookmarkStore(),
         commentStore: CommentStore = CommentStore(),
         changeTracker: ChangeTracker = ChangeTracker(currentAuthor: TrackChangesPrimitive.AuthorID(rawValue: "system"))
@@ -69,6 +72,7 @@ public final class DocumentEditorState {
         self.currentPage = currentPage
         self.currentSection = currentSection ?? document.sections.first?.id
         self.currentTrackedChangeID = nil
+        self.reviewFilterConfiguration = reviewFilterConfiguration
         self.bookmarkStore = bookmarkStore
         self.commentStore = commentStore
         self.changeTracker = changeTracker

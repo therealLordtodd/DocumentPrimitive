@@ -1,10 +1,9 @@
-import BookmarkPrimitive
-import CommentPrimitive
 import SwiftUI
 import TrackChangesPrimitive
 
 public struct DocumentToolbar: View {
     @Bindable private var state: DocumentEditorState
+    @State private var showingReviewNavigator = false
 
     public init(state: DocumentEditorState) {
         self.state = state
@@ -59,60 +58,15 @@ public struct DocumentToolbar: View {
             .menuStyle(.borderlessButton)
             .disabled(!state.canEditCurrentSectionHeaderFooterOptions)
 
-            Menu {
-                if let currentCommentSummary = state.currentCommentSummary {
-                    Section("Current Comment") {
-                        Text(currentCommentSummary)
-
-                        Button("Previous Comment") {
-                            state.goToPreviousComment()
-                        }
-                        .disabled(commentCount == 0)
-
-                        Button("Next Comment") {
-                            state.goToNextComment()
-                        }
-                        .disabled(commentCount == 0)
-
-                        if state.currentComment?.status == .open {
-                            Button("Resolve Comment") {
-                                state.resolveCurrentComment()
-                            }
-                        } else {
-                            Button("Reopen Comment") {
-                                state.reopenCurrentComment()
-                            }
-                        }
-                    }
-                }
-
-                if bookmarkEntries.isEmpty {
-                    Text("No bookmarks")
-                } else {
-                    Section("Bookmarks") {
-                        ForEach(bookmarkEntries, id: \.id) { entry in
-                            Button(entry.label) {
-                                state.focusBookmark(entry.id)
-                            }
-                        }
-                    }
-                }
-
-                if openCommentEntries.isEmpty {
-                    Text("No open comments")
-                } else {
-                    Section("Comments") {
-                        ForEach(openCommentEntries, id: \.id) { entry in
-                            Button(entry.label) {
-                                state.focusComment(entry.id)
-                            }
-                        }
-                    }
-                }
+            Button {
+                showingReviewNavigator.toggle()
             } label: {
                 Label("Review", systemImage: "list.bullet.rectangle")
             }
-            .menuStyle(.borderlessButton)
+            .buttonStyle(.borderless)
+            .popover(isPresented: $showingReviewNavigator, arrowEdge: .bottom) {
+                ReviewNavigatorPopover(state: state)
+            }
 
             Spacer()
 
@@ -257,27 +211,6 @@ public struct DocumentToolbar: View {
         }
         return changeCount == 1 ? "1 Change" : "\(changeCount) Changes"
     }
-
-    private var bookmarkEntries: [(id: BookmarkID, label: String)] {
-        state.bookmarkStore.bookmarks.map { bookmark in
-            let pageNumber = state.bookmarkStore.positionResolver?.pageNumber(for: bookmark.anchor)
-            let pageSuffix = pageNumber.map { " (p.\($0))" } ?? ""
-            return (bookmark.id, "\(bookmark.name)\(pageSuffix)")
-        }
-    }
-
-    private var openCommentEntries: [(id: CommentID, label: String)] {
-        state.commentStore.openComments.map { comment in
-            let body = comment.body.trimmingCharacters(in: .whitespacesAndNewlines)
-            let preview = body.isEmpty ? "Untitled comment" : String(body.prefix(36))
-            return (comment.id, preview)
-        }
-    }
-
-    private var commentCount: Int {
-        state.commentStore.openComments.count
-    }
-
     @ViewBuilder
     private func visibilityButton(_ title: String, visibility: ChangeVisibility) -> some View {
         Button {
