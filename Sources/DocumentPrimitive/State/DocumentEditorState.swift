@@ -33,6 +33,8 @@ public final class DocumentEditorState {
     public var currentSection: SectionID?
     public var currentTrackedChangeID: ChangeID?
     public var reviewFilterConfiguration: FilterConfiguration
+    public var documentSearchText: String
+    public var selectedDocumentSearchScope: DocumentSearchScope?
     public let bookmarkStore: BookmarkStore
     public let commentStore: CommentStore
     public let changeTracker: ChangeTracker
@@ -60,6 +62,8 @@ public final class DocumentEditorState {
         currentPage: Int = 1,
         currentSection: SectionID? = nil,
         reviewFilterConfiguration: FilterConfiguration = FilterConfiguration(),
+        documentSearchText: String = "",
+        selectedDocumentSearchScope: DocumentSearchScope? = nil,
         bookmarkStore: BookmarkStore = BookmarkStore(),
         commentStore: CommentStore = CommentStore(),
         changeTracker: ChangeTracker = ChangeTracker(currentAuthor: TrackChangesPrimitive.AuthorID(rawValue: "system"))
@@ -73,6 +77,8 @@ public final class DocumentEditorState {
         self.currentSection = currentSection ?? document.sections.first?.id
         self.currentTrackedChangeID = nil
         self.reviewFilterConfiguration = reviewFilterConfiguration
+        self.documentSearchText = documentSearchText
+        self.selectedDocumentSearchScope = selectedDocumentSearchScope
         self.bookmarkStore = bookmarkStore
         self.commentStore = commentStore
         self.changeTracker = changeTracker

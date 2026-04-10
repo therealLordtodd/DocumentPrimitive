@@ -19,6 +19,7 @@ let package = Package(
         .package(path: "../GridPrimitive"),
         .package(path: "../DragAndDropPrimitive"),
         .package(path: "../FilterPrimitive"),
+        .package(path: "../SearchPrimitive"),
         .package(path: "../RulerPrimitive"),
         .package(path: "../CommentPrimitive"),
         .package(path: "../TrackChangesPrimitive"),
@@ -33,6 +34,7 @@ let package = Package(
                 .product(name: "PaginationPrimitive", package: "PaginationPrimitive"),
                 .product(name: "DragAndDropPrimitive", package: "DragAndDropPrimitive"),
                 .product(name: "FilterPrimitive", package: "FilterPrimitive"),
+                .product(name: "SearchPrimitive", package: "SearchPrimitive"),
                 .product(name: "RulerPrimitive", package: "RulerPrimitive"),
                 .product(name: "CommentPrimitive", package: "CommentPrimitive"),
                 .product(name: "TrackChangesPrimitive", package: "TrackChangesPrimitive"),
@@ -70,6 +72,7 @@ let package = Package(
                 .product(name: "BookmarkPrimitive", package: "BookmarkPrimitive"),
                 .product(name: "CommentPrimitive", package: "CommentPrimitive"),
                 .product(name: "FilterPrimitive", package: "FilterPrimitive"),
+                .product(name: "SearchPrimitive", package: "SearchPrimitive"),
                 .product(name: "TrackChangesPrimitive", package: "TrackChangesPrimitive"),
             ]
         ),

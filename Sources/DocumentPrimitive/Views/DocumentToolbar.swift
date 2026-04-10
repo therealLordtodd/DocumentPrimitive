@@ -3,6 +3,7 @@ import TrackChangesPrimitive
 
 public struct DocumentToolbar: View {
     @Bindable private var state: DocumentEditorState
+    @State private var showingSearchNavigator = false
     @State private var showingReviewNavigator = false
 
     public init(state: DocumentEditorState) {
@@ -57,6 +58,16 @@ public struct DocumentToolbar: View {
             }
             .menuStyle(.borderlessButton)
             .disabled(!state.canEditCurrentSectionHeaderFooterOptions)
+
+            Button {
+                showingSearchNavigator.toggle()
+            } label: {
+                Label("Search", systemImage: "magnifyingglass")
+            }
+            .buttonStyle(.borderless)
+            .popover(isPresented: $showingSearchNavigator, arrowEdge: .bottom) {
+                DocumentSearchPopover(state: state)
+            }
 
             Button {
                 showingReviewNavigator.toggle()

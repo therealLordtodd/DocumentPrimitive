@@ -1929,4 +1929,91 @@ struct DocumentModelTests {
         #expect(pageItems.map(\.sourceID).contains(resolvedComment.id.rawValue))
         #expect(pageItems.map(\.kindRawValue).contains("bookmark"))
     }
+
+    @MainActor
+    @Test func documentSearchFindsMixedDocumentArtifactsAndCanFocusHeadingResults() async {
+        let state = DocumentEditorState(
+            document: Document(
+                title: "Search",
+                sections: [
+                    DocumentSection(
+                        id: "section",
+                        blocks: [
+                            Block(id: "heading", type: .heading, content: .heading(.plain("Compass"), level: 1)),
+                            Block(id: "body", type: .paragraph, content: .text(.plain("Lead body text"))),
+                            Block(id: "tail", type: .paragraph, content: .text(.plain("Tail copy"))),
+                        ]
+                    ),
+                ]
+            ),
+            changeTracker: ChangeTracker(currentAuthor: "todd", isTracking: true)
+        )
+
+        state.addBookmark(named: "Compass marker", for: "tail")
+        state.richTextState.selection = .range(
+            start: TextPosition(blockID: "tail", offset: 0),
+            end: TextPosition(blockID: "tail", offset: 4)
+        )
+        _ = try! #require(state.addComment(body: "Compass note", authorID: "reviewer"))
+        state.changeTracker.recordInsertion(
+            anchor: ChangeAnchor(blockID: "tail", offset: 2, length: 7),
+            text: "Compass"
+        )
+
+        let results = await state.documentSearchResults(matching: "Compass")
+
+        #expect(results.totalCount == 5)
+        #expect(results.facetCounts[.headings] == 1)
+        #expect(results.facetCounts[.comments] == 1)
+        #expect(results.facetCounts[.changes] == 1)
+        #expect(results.facetCounts[.bookmarks] == 2)
+        #expect(Set(results.items.map(\.scope)) == Set(DocumentSearchScope.allCases))
+
+        let headingResult = try! #require(results.items.first(where: { $0.scope == .headings }))
+        state.focusDocumentSearchResult(headingResult)
+
+        #expect(state.richTextState.focusedBlockID == "heading")
+        #expect(state.currentSection == "section")
+        #expect(state.currentPage == 1)
+    }
+
+    @MainActor
+    @Test func documentSearchScopeFiltersResultsButKeepsGlobalFacetCounts() async {
+        let state = DocumentEditorState(
+            document: Document(
+                title: "Search",
+                sections: [
+                    DocumentSection(
+                        id: "section",
+                        blocks: [
+                            Block(id: "heading", type: .heading, content: .heading(.plain("Compass"), level: 1)),
+                            Block(id: "tail", type: .paragraph, content: .text(.plain("Tail copy"))),
+                        ]
+                    ),
+                ]
+            ),
+            changeTracker: ChangeTracker(currentAuthor: "todd", isTracking: true)
+        )
+
+        state.addBookmark(named: "Compass marker", for: "tail")
+        state.richTextState.selection = .range(
+            start: TextPosition(blockID: "tail", offset: 0),
+            end: TextPosition(blockID: "tail", offset: 4)
+        )
+        _ = try! #require(state.addComment(body: "Compass note", authorID: "reviewer"))
+        state.changeTracker.recordInsertion(
+            anchor: ChangeAnchor(blockID: "tail", offset: 1, length: 7),
+            text: "Compass"
+        )
+
+        let results = await state.documentSearchResults(matching: "Compass", scope: .comments)
+
+        #expect(results.totalCount == 1)
+        #expect(results.items.count == 1)
+        #expect(results.items.allSatisfy { $0.scope == .comments })
+        #expect(results.facetCounts[.headings] == 1)
+        #expect(results.facetCounts[.comments] == 1)
+        #expect(results.facetCounts[.changes] == 1)
+        #expect(results.facetCounts[.bookmarks] == 2)
+    }
 }
