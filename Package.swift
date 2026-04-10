@@ -12,6 +12,7 @@ let package = Package(
         .library(name: "DocumentPrimitive", targets: ["DocumentPrimitive"]),
         .library(name: "DocumentPrimitiveGrid", targets: ["DocumentPrimitiveGrid"]),
         .library(name: "DocumentPrimitiveExport", targets: ["DocumentPrimitiveExport"]),
+        .library(name: "DocumentPrimitivePreview", targets: ["DocumentPrimitivePreview"]),
     ],
     dependencies: [
         .package(path: "../RichTextPrimitive"),
@@ -22,6 +23,7 @@ let package = Package(
         .package(path: "../SearchPrimitive"),
         .package(path: "../BadgePrimitive"),
         .package(path: "../HoverBadgePrimitive"),
+        .package(path: "../PreviewPrimitive"),
         .package(path: "../RulerPrimitive"),
         .package(path: "../CommentPrimitive"),
         .package(path: "../TrackChangesPrimitive"),
@@ -69,6 +71,14 @@ let package = Package(
                 .product(name: "PaginationPrimitive", package: "PaginationPrimitive"),
             ]
         ),
+        .target(
+            name: "DocumentPrimitivePreview",
+            dependencies: [
+                "DocumentPrimitive",
+                .product(name: "RichTextPrimitive", package: "RichTextPrimitive"),
+                .product(name: "PreviewPrimitive", package: "PreviewPrimitive"),
+            ]
+        ),
         .testTarget(
             name: "DocumentPrimitiveTests",
             dependencies: [
@@ -87,6 +97,10 @@ let package = Package(
         .testTarget(
             name: "DocumentPrimitiveExportTests",
             dependencies: ["DocumentPrimitiveExport", "DocumentPrimitive", .product(name: "ExportKit", package: "ExportKit")]
+        ),
+        .testTarget(
+            name: "DocumentPrimitivePreviewTests",
+            dependencies: ["DocumentPrimitivePreview", "DocumentPrimitive", .product(name: "RichTextPrimitive", package: "RichTextPrimitive")]
         ),
     ]
 )
