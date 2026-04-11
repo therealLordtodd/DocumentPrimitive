@@ -1,6 +1,6 @@
 # DocumentPrimitive
 
-DocumentPrimitive provides a word-processor document layer on top of `RichTextPrimitive`. It adds sections, pages, columns, headers and footers, footnotes, TOC/list/field services, print preview, document-level editor state, export mapping, optional preview integration, and optional GridPrimitive table editing.
+DocumentPrimitive provides a word-processor document layer on top of `RichTextPrimitive`. It adds sections, pages, columns, first/odd/even headers and footers, footnotes, TOC/list/field services, page and continuous editing surfaces, document-level review and search navigation, export mapping, optional preview integration, and optional GridPrimitive table editing.
 
 ## Products
 - `DocumentPrimitive`: Cross-platform core document model, services, layout, state, and views.
@@ -52,7 +52,7 @@ struct DocumentHost: View {
 - `DocumentEditorState`: Main editor state with layout, page navigation, data-source adapters, comments, bookmarks, and tracked changes.
 - `PageLayoutEngine`, `ComputedPage`, `BlockRange`, and `BlockFragmentPlacement`: Section-to-page layout.
 - `TOCGenerator`, `FootnoteManager`, `ListNumberingEngine`, and `FieldCodeResolver`: Document services.
-- `DocumentEditor`, `PageView`, `PrintPreview`, and `DocumentToolbar`: SwiftUI views.
+- `DocumentEditor`, `PageView`, `PrintPreview`, `DocumentToolbar`, `DocumentSearchPopover`, and `ReviewNavigatorPopover`: SwiftUI views.
 - `BlockToExportMapper`, `MarkdownExporter`, `HTMLExporter`, and `PDFExporter`: Export implementation surface.
 - `DocumentPreviewAttachmentResolver`, `DocumentAttachmentPreview`, and `DocumentAttachmentGallery`: Optional preview-focused document attachment surface.
 - `GridDocumentEditor`, `GridPrintPreview`, `GridTableAdapter`, and `GridTableEditor`: Optional grid table integration.
@@ -62,12 +62,18 @@ struct DocumentHost: View {
 `Document.sections[].blocks` is the authoritative store. The editor exposes rich text adapters for specific editing scopes:
 
 - `SectionDataSource` edits a whole section.
-- `PageScopedDataSource` edits blocks visible on a computed page.
+- `PageScopedDataSource` edits a whole visible page surface when that page is a safe whole-block editor.
 - `FragmentDataSource` edits a page fragment of a split block.
 - `BlockDataSource` edits a single block.
 - `HeaderFooterDataSource` edits a specific first, primary, or even header/footer slot.
 
 Layout, TOC generation, export, and preview should read the document model directly rather than treating data sources as durable state.
+
+## Page Mode Editing
+
+Page mode prefers a single page-scoped `RichTextEditor` whenever the computed page is a single-column, whole-block editing surface. That keeps body editing on the same cross-block selection and keyboard path as the continuous editor.
+
+When the page contains split placements or repeated placements for the same block, `PageView` falls back to `FragmentDataSource` and `BlockDataSource` editors so pagination stays faithful to the rendered layout. Headers and footers remain separate `RichTextEditor` instances and still support independent first-page, primary, and even-page slots.
 
 ## Header And Footer Variants
 
@@ -80,6 +86,10 @@ Layout, TOC generation, export, and preview should read the document model direc
 ## Section Reordering
 
 In continuous and canvas modes, `DocumentEditor` exposes a dedicated drag handle for each section. The handle uses `DragAndDropPrimitive` while `DocumentEditorState.moveSections(from:to:)` updates the authoritative `document.sections` array and reflows pagination.
+
+## Review And Navigation
+
+Document review and search surfaces are built on shared primitives instead of bespoke controls. `ReviewNavigatorPopover` uses `FilterPrimitive` for structured review filters, while page chrome and review markers use `BadgePrimitive` and `HoverBadgePrimitive`. `DocumentSearchPopover` uses `SearchPrimitive` for document-wide navigation across headings, comments, bookmarks, and tracked changes.
 
 ## Export
 
@@ -103,7 +113,7 @@ let attachments = DocumentPreviewAttachmentResolver().attachments(in: document)
 let gallery = DocumentAttachmentGallery(attachments: attachments)
 ```
 
-Use `DocumentPrimitivePreview` when a host wants preview-backed handling for image, file, and embed-style blocks without adding `PreviewPrimitive` directly to the core editor dependency surface.
+Use `DocumentPrimitivePreview` when a host wants preview-backed handling for image, file, and embed-style blocks without adding `PreviewPrimitive` directly to the core editor dependency surface. The resolver keeps inline data, local file URLs, and remote URLs intact so `PreviewPrimitive` can either render them or surface capability limitations instead of silently dropping attachments.
 
 ## Testing
 
@@ -120,3 +130,5 @@ xcodebuild build -scheme DocumentPrimitive -destination 'generic/platform=iOS Si
 xcodebuild build -scheme DocumentPrimitiveExport -destination 'generic/platform=iOS Simulator' -quiet
 xcodebuild build -scheme DocumentPrimitive-Package -destination 'generic/platform=iOS Simulator' -quiet
 ```
+
+When changing page-mode behavior, add coverage for unified page editing versus fragment fallback. When changing preview resolution, cover inline, local, and remote attachment sources.

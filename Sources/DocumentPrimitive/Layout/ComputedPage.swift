@@ -62,6 +62,19 @@ public struct ComputedPage: Identifiable, Sendable, Equatable {
         )
     }
 
+    var prefersUnifiedEditorSurface: Bool {
+        guard !blockPlacements.isEmpty else { return true }
+        guard template.columns == 1 else { return false }
+
+        var seenBlockIDs: Set<BlockID> = []
+        for placement in blockPlacements {
+            guard !placement.isPartial else { return false }
+            guard seenBlockIDs.insert(placement.blockID).inserted else { return false }
+        }
+
+        return true
+    }
+
     public init(
         id: UUID = UUID(),
         sectionID: SectionID,

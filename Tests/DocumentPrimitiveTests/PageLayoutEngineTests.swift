@@ -228,5 +228,38 @@ struct PageLayoutEngineTests {
         #expect(engine.pages.count > 1)
         #expect(engine.pages[0].blockPlacements.contains { $0.blockID == "body" && $0.isPartial })
         #expect(engine.pages[1].blockPlacements.contains { $0.blockID == "body" && $0.isPartial })
+        #expect(!engine.pages[0].prefersUnifiedEditorSurface)
+        #expect(!engine.pages[1].prefersUnifiedEditorSurface)
+    }
+
+    @Test func wholeSingleColumnPagesPreferUnifiedEditorSurface() {
+        let page = ComputedPage(
+            sectionID: "section-1",
+            pageNumber: 1,
+            blockRanges: [BlockRange(startIndex: 0, endIndex: 1)],
+            blockPlacements: [
+                BlockFragmentPlacement(
+                    id: UUID(),
+                    blockID: "intro",
+                    blockIndex: 0,
+                    frame: CGRect(x: 0, y: 0, width: 200, height: 24),
+                    itemHeight: 24
+                ),
+                BlockFragmentPlacement(
+                    id: UUID(),
+                    blockID: "body",
+                    blockIndex: 1,
+                    frame: CGRect(x: 0, y: 32, width: 200, height: 48),
+                    itemHeight: 48
+                ),
+            ]
+        )
+
+        #expect(page.prefersUnifiedEditorSurface)
+
+        var multiColumnPage = page
+        multiColumnPage.template.columns = 2
+
+        #expect(!multiColumnPage.prefersUnifiedEditorSurface)
     }
 }

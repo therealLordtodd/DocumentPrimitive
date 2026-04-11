@@ -65,7 +65,7 @@ struct DocumentPreviewAttachmentResolverTests {
         #expect(attachment.previewItem.fileType == UTType.pdf)
     }
 
-    @Test func documentAttachmentsPreserveBlockOrderAndSkipUnsupportedRemoteItems() {
+    @Test func documentAttachmentsPreserveBlockOrderAndIncludeRemoteItems() {
         let resolver = DocumentPreviewAttachmentResolver()
         let localImageURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("document-preview-image")
@@ -102,9 +102,9 @@ struct DocumentPreviewAttachmentResolverTests {
                             type: .embed,
                             content: .embed(
                                 EmbedContent(
-                                    kind: "markdown",
+                                    kind: "pdf",
                                     metadata: [
-                                        "path": .string("/tmp/spec.md"),
+                                        "url": .string("https://example.com/spec.pdf"),
                                         "title": .string("Spec"),
                                     ]
                                 )
@@ -117,7 +117,9 @@ struct DocumentPreviewAttachmentResolverTests {
 
         let attachments = resolver.attachments(in: document)
 
-        #expect(attachments.map(\.blockID.rawValue) == ["local-image", "embed"])
-        #expect(attachments.map(\.title) == ["document-preview-image.png", "Spec"])
+        #expect(attachments.map(\.blockID.rawValue) == ["remote-image", "local-image", "embed"])
+        #expect(attachments.map(\.title) == ["remote.png", "document-preview-image.png", "Spec"])
+        #expect(attachments[0].previewItem.url.absoluteString == "https://example.com/remote.png")
+        #expect(attachments[2].previewItem.url.absoluteString == "https://example.com/spec.pdf")
     }
 }

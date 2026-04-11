@@ -200,7 +200,7 @@ public struct PageView: View {
 
     @ViewBuilder
     private func activePageContent(sectionBlocks: [Block]) -> some View {
-        if sectionBlocks.isEmpty || page.blockPlacements.isEmpty {
+        if sectionBlocks.isEmpty || page.prefersUnifiedEditorSurface {
             let pageEditorState = state.richTextState(forPage: page)
             RichTextEditor(
                 state: pageEditorState,

@@ -50,7 +50,7 @@ public struct DocumentPreviewAttachmentResolver: Sendable {
             )
         }
 
-        guard let url = content.url, url.isFileURL else {
+        guard let url = content.url else {
             return nil
         }
 
@@ -93,7 +93,7 @@ public struct DocumentPreviewAttachmentResolver: Sendable {
             )
         }
 
-        guard let url = resolved.url, url.isFileURL else {
+        guard let url = resolved.url else {
             return nil
         }
 
@@ -224,15 +224,14 @@ public struct DocumentPreviewAttachmentResolver: Sendable {
     ) -> (url: URL?, data: Data?, fileType: UTType?, title: String) {
         let metadataURL = urlValue(forKeyCandidates: ["url", "fileURL", "path"], metadata: content.metadata)
         let payloadURL = content.payload.flatMap(URL.init(string:))
-        let localCandidates: [URL?] = [metadataURL, payloadURL]
-        let localURL = localCandidates
+        let resolvedURL = [metadataURL, payloadURL]
             .compactMap { candidate -> URL? in
                 guard let candidate else { return nil }
                 if candidate.isFileURL { return candidate }
                 if candidate.scheme == nil {
                     return URL(fileURLWithPath: candidate.absoluteString)
                 }
-                return nil
+                return candidate
             }
             .first
 
@@ -246,16 +245,16 @@ public struct DocumentPreviewAttachmentResolver: Sendable {
             .flatMap(URL.init(string:))
             .flatMap(inferredType(from:))
         let fileType = metadataType
-            ?? localURL.flatMap(inferredType(from:))
+            ?? resolvedURL.flatMap(inferredType(from:))
             ?? payloadType
             ?? fallbackEmbedType(kind: content.kind)
 
         let title =
             metadataString(forKeyCandidates: ["title", "filename", "name"], metadata: content.metadata)
-            ?? localURL?.lastPathComponent
+            ?? resolvedURL?.lastPathComponent
             ?? content.kind.uppercased()
 
-        return (url: localURL, data: nil, fileType: fileType, title: title)
+        return (url: resolvedURL, data: nil, fileType: fileType, title: title)
     }
 
     private func metadataString(
