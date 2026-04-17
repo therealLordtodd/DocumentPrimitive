@@ -76,7 +76,7 @@ let package = Package(
             dependencies: [
                 "DocumentPrimitive",
                 .product(name: "RichTextPrimitive", package: "RichTextPrimitive"),
-                .product(name: "PreviewPrimitive", package: "PreviewPrimitive"),
+                .product(name: "FilePreviewPrimitive", package: "PreviewPrimitive"),
             ]
         ),
         .testTarget(

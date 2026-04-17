@@ -1,5 +1,5 @@
 import DocumentPrimitive
-import PreviewPrimitive
+import FilePreviewPrimitive
 import SwiftUI
 
 @MainActor

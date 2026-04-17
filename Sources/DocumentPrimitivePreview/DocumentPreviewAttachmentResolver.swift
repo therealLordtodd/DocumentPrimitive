@@ -1,6 +1,6 @@
 import DocumentPrimitive
 import Foundation
-import PreviewPrimitive
+import FilePreviewPrimitive
 import RichTextPrimitive
 import UniformTypeIdentifiers
 
