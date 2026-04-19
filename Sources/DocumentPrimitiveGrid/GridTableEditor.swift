@@ -71,6 +71,7 @@ final class GridTableEditorModel {
 @MainActor
 public struct GridTableEditor: View {
     @State private var model: GridTableEditorModel
+    @Environment(\.documentTheme) private var theme
 
     private let table: TableContent
     private let configuration: TableConfiguration
@@ -96,11 +97,11 @@ public struct GridTableEditor: View {
     }
 
     public var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: theme.spacing.navigatorRowSpacing) {
             if let caption = model.table.caption?.plainText, !caption.isEmpty {
                 Text(caption)
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(.secondary)
+                    .font(theme.typography.footnote.weight(.semibold))
+                    .foregroundStyle(theme.colors.secondary)
             }
 
             TableView(
@@ -126,6 +127,7 @@ public struct GridTableEditor: View {
 
 @MainActor
 public struct GridTableBlockEditor: View {
+    @Environment(\.documentTheme) private var theme
     private let block: Block
     private let editable: Bool
     private let configuration: TableConfiguration?
@@ -163,8 +165,8 @@ public struct GridTableBlockEditor: View {
             }
         } else {
             Text("Grid table editor requires a table block.")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
+                .font(theme.typography.footnote)
+                .foregroundStyle(theme.colors.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
@@ -173,6 +175,7 @@ public struct GridTableBlockEditor: View {
 @MainActor
 public struct DocumentTableBlockEditor: View {
     @Bindable private var editorState: DocumentEditorState
+    @Environment(\.documentTheme) private var theme
 
     private let sectionID: SectionID
     private let blockID: BlockID
@@ -204,8 +207,8 @@ public struct DocumentTableBlockEditor: View {
             }
         } else {
             Text("Table block not found.")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
+                .font(theme.typography.footnote)
+                .foregroundStyle(theme.colors.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
     }

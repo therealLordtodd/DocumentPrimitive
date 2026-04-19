@@ -2,6 +2,7 @@ import SwiftUI
 
 public struct PrintPreview: View {
     @Bindable private var state: DocumentEditorState
+    @Environment(\.documentTheme) private var theme
 
     public init(state: DocumentEditorState) {
         self.state = state
@@ -12,7 +13,7 @@ public struct PrintPreview: View {
 
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(spacing: 28) {
+                LazyVStack(spacing: theme.spacing.pageGap) {
                     ForEach(projection.pages) { page in
                         PageView(
                             state: state,
@@ -24,9 +25,9 @@ public struct PrintPreview: View {
                             .id(state.pageScrollKey(for: page))
                     }
                 }
-                .padding(24)
+                .padding(theme.spacing.containerPadding)
             }
-            .background(Color.secondary.opacity(0.08))
+            .background(theme.colors.canvasBackground)
             .onAppear {
                 scrollToCurrentPage(using: proxy, pages: projection.pages)
             }
@@ -38,7 +39,7 @@ public struct PrintPreview: View {
 
     private func scrollToCurrentPage(using proxy: ScrollViewProxy, pages: [ComputedPage]) {
         guard let target = state.currentPageScrollKey(in: pages) else { return }
-        withAnimation(.easeInOut(duration: 0.2)) {
+        withAnimation(theme.scrollAnimation) {
             proxy.scrollTo(target, anchor: .center)
         }
     }

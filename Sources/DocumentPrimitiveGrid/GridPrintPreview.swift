@@ -7,6 +7,7 @@ import SwiftUI
 @MainActor
 public struct GridDocumentEditor: View {
     @Bindable private var state: DocumentEditorState
+    @Environment(\.documentTheme) private var theme
 
     public init(state: DocumentEditorState) {
         self.state = state
@@ -41,28 +42,29 @@ public struct GridDocumentEditor: View {
                 ForEach(0...tickCount, id: \.self) { index in
                     VStack(spacing: 2) {
                         Rectangle()
-                            .fill(index.isMultiple(of: 4) ? Color.secondary : Color.secondary.opacity(0.5))
+                            .fill(index.isMultiple(of: 4) ? theme.colors.secondary : theme.colors.secondary.opacity(theme.opacity.rulerTickMinor + 0.05))
                             .frame(width: 1, height: index.isMultiple(of: 4) ? 14 : 8)
                         if index < tickCount, index.isMultiple(of: 4) {
                             Text("\(index / 4)")
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
+                                .font(theme.typography.caption2)
+                                .foregroundStyle(theme.colors.secondary)
                         }
                     }
                     .frame(maxWidth: .infinity)
                 }
             }
-            .padding(.horizontal, 20)
+            .padding(.horizontal, theme.spacing.containerPadding - 4)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
-        .frame(height: 28)
-        .background(Color.secondary.opacity(0.08))
+        .frame(height: theme.metrics.rulerHeight - 6)
+        .background(theme.mutedFill)
     }
 }
 
 @MainActor
 public struct GridPrintPreview: View {
     @Bindable private var state: DocumentEditorState
+    @Environment(\.documentTheme) private var theme
 
     public init(state: DocumentEditorState) {
         self.state = state
@@ -71,15 +73,15 @@ public struct GridPrintPreview: View {
     public var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(spacing: 28) {
+                LazyVStack(spacing: theme.spacing.pageGap) {
                     ForEach(state.layoutEngine.pages) { page in
                         GridPageView(state: state, page: page)
                             .id(pageScrollID(for: page))
                     }
                 }
-                .padding(24)
+                .padding(theme.spacing.containerPadding)
             }
-            .background(Color.secondary.opacity(0.08))
+            .background(theme.colors.canvasBackground)
             .onAppear {
                 scrollToCurrentPage(using: proxy)
             }
@@ -91,7 +93,7 @@ public struct GridPrintPreview: View {
 
     private func scrollToCurrentPage(using proxy: ScrollViewProxy) {
         guard let target = currentPageScrollID else { return }
-        withAnimation(.easeInOut(duration: 0.2)) {
+        withAnimation(theme.scrollAnimation) {
             proxy.scrollTo(target, anchor: .center)
         }
     }
@@ -125,6 +127,7 @@ public struct GridPrintPreview: View {
 @MainActor
 public struct GridPageView: View {
     @Bindable private var state: DocumentEditorState
+    @Environment(\.documentTheme) private var theme
     private let page: ComputedPage
     private let tableResolver = GridPageTableResolver()
 
@@ -134,23 +137,23 @@ public struct GridPageView: View {
     }
 
     public var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: theme.spacing.sectionGap - 4) {
             PageView(state: state, page: page)
                 .pageInlineBlockRenderer(pageInlineRenderer)
 
             if isActivePage, !detachedTablePlacements.isEmpty {
-                VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: theme.spacing.navigatorRowPadding) {
                     Text(detachedTablePlacements.count == 1 ? "Table Editor" : "Table Editors")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
+                        .font(theme.typography.caption.weight(.semibold))
+                        .foregroundStyle(theme.colors.secondary)
 
                     ForEach(detachedTablePlacements) { placement in
-                        VStack(alignment: .leading, spacing: 8) {
+                        VStack(alignment: .leading, spacing: theme.spacing.navigatorRowSpacing) {
                             if case let .table(table) = placement.block.content,
                                let caption = table.caption?.plainText,
                                !caption.isEmpty {
                                 Text(caption)
-                                    .font(.footnote.weight(.semibold))
+                                    .font(theme.typography.footnote.weight(.semibold))
                                     .foregroundStyle(.primary)
                             }
 
@@ -162,9 +165,9 @@ public struct GridPageView: View {
                                 configuration: .compact
                             )
                         }
-                        .padding(14)
-                        .background(Color.secondary.opacity(0.09))
-                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        .padding(theme.spacing.gridTableEditorPadding)
+                        .background(theme.colors.secondary.opacity(theme.opacity.mutedFill + 0.01))
+                        .clipShape(RoundedRectangle(cornerRadius: theme.metrics.gridTableEditorCornerRadius, style: .continuous))
                     }
                 }
                 .frame(maxWidth: page.template.size.width, alignment: .leading)
@@ -208,15 +211,15 @@ public struct GridPageView: View {
                     editable: true,
                     configuration: .compact
                 )
-                .padding(8)
+                .padding(theme.spacing.navigatorRowSpacing)
                 .frame(
                     maxWidth: .infinity,
                     minHeight: max(context.placement.frame.height, 84),
                     maxHeight: max(context.placement.frame.height, 84),
                     alignment: .topLeading
                 )
-                .background(Color.secondary.opacity(0.09))
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .background(theme.colors.secondary.opacity(theme.opacity.mutedFill + 0.01))
+                .clipShape(RoundedRectangle(cornerRadius: theme.metrics.cardCornerRadius, style: .continuous))
             )
         }
     }

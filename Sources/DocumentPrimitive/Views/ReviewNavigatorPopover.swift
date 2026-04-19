@@ -5,13 +5,14 @@ import SwiftUI
 struct ReviewNavigatorPopover: View {
     @Bindable private var state: DocumentEditorState
     @State private var showsAdvancedFilters = false
+    @Environment(\.documentTheme) private var theme
 
     init(state: DocumentEditorState) {
         self._state = Bindable(wrappedValue: state)
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: theme.spacing.popoverContentSpacing) {
             header
 
             if let currentCommentSummary = state.currentCommentSummary {
@@ -52,7 +53,7 @@ struct ReviewNavigatorPopover: View {
                 )
             } else {
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 8) {
+                    LazyVStack(alignment: .leading, spacing: theme.spacing.navigatorRowSpacing) {
                         ForEach(state.filteredReviewNavigatorItems) { item in
                             reviewItemRow(item)
                         }
@@ -61,18 +62,18 @@ struct ReviewNavigatorPopover: View {
                 }
             }
         }
-        .padding(16)
-        .frame(width: 430, height: 520)
+        .padding(theme.spacing.popoverPadding)
+        .frame(width: theme.metrics.popoverWidth, height: theme.metrics.popoverHeight)
     }
 
     private var header: some View {
         HStack(alignment: .firstTextBaseline) {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Review Navigator")
-                    .font(.headline)
+                    .font(theme.typography.headline)
                 Text(summaryText)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(theme.typography.caption)
+                    .foregroundStyle(theme.colors.secondary)
             }
 
             Spacer()
@@ -87,16 +88,16 @@ struct ReviewNavigatorPopover: View {
     }
 
     private func currentCommentControls(summary: String) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: theme.spacing.navigatorRowSpacing) {
             Text("Current Comment")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .font(theme.typography.caption)
+                .foregroundStyle(theme.colors.secondary)
 
             Text(summary)
                 .font(.subheadline)
                 .lineLimit(2)
 
-            HStack(spacing: 8) {
+            HStack(spacing: theme.spacing.navigatorRowSpacing) {
                 Button("Previous") {
                     state.goToPreviousComment()
                 }
@@ -120,10 +121,10 @@ struct ReviewNavigatorPopover: View {
                 }
             }
         }
-        .padding(12)
+        .padding(theme.spacing.navigatorRowPadding)
         .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color.secondary.opacity(0.08))
+            RoundedRectangle(cornerRadius: theme.metrics.cardCornerRadius)
+                .fill(theme.mutedFill)
         )
     }
 
@@ -133,15 +134,15 @@ struct ReviewNavigatorPopover: View {
         return Button {
             state.focusReviewNavigatorItem(item)
         } label: {
-            HStack(alignment: .top, spacing: 12) {
+            HStack(alignment: .top, spacing: theme.spacing.navigatorRowIconGap) {
                 Image(systemName: item.systemImage)
-                    .foregroundStyle(isFocused ? Color.accentColor : .secondary)
-                    .frame(width: 18)
+                    .foregroundStyle(isFocused ? theme.colors.accent : theme.colors.secondary)
+                    .frame(width: theme.metrics.navigatorIconWidth)
 
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                VStack(alignment: .leading, spacing: theme.spacing.annotationBadgeGap) {
+                    HStack(alignment: .firstTextBaseline, spacing: theme.spacing.navigatorRowSpacing) {
                         Text(item.title)
-                            .font(.subheadline.weight(.medium))
+                            .font(theme.typography.rowTitle)
                             .foregroundStyle(.primary)
                             .multilineTextAlignment(.leading)
                             .lineLimit(2)
@@ -154,11 +155,11 @@ struct ReviewNavigatorPopover: View {
                     }
 
                     Text(item.subtitle)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(theme.typography.caption)
+                        .foregroundStyle(theme.colors.secondary)
                         .lineLimit(2)
 
-                    HStack(spacing: 6) {
+                    HStack(spacing: theme.spacing.annotationBadgeGap) {
                         DocumentMetadataBadge(text: item.kindLabel)
                         if let statusLabel = item.statusLabel {
                             DocumentMetadataBadge(text: statusLabel)
@@ -171,29 +172,29 @@ struct ReviewNavigatorPopover: View {
 
                 if isFocused {
                     Image(systemName: "location.fill")
-                        .font(.caption)
-                        .foregroundStyle(Color.accentColor)
+                        .font(theme.typography.caption)
+                        .foregroundStyle(theme.colors.accent)
                 }
             }
-            .padding(12)
+            .padding(theme.spacing.navigatorRowPadding)
             .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(isFocused ? Color.accentColor.opacity(0.12) : Color.secondary.opacity(0.06))
+                RoundedRectangle(cornerRadius: theme.metrics.cardCornerRadius)
+                    .fill(isFocused ? theme.selectedFill : theme.subtleFill)
             )
         }
         .buttonStyle(.plain)
     }
 
     private func emptyState(title: String, message: String) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: theme.spacing.annotationBadgeGap) {
             Text(title)
-                .font(.subheadline.weight(.medium))
+                .font(theme.typography.rowTitle)
             Text(message)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .font(theme.typography.caption)
+                .foregroundStyle(theme.colors.secondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .padding(.top, 12)
+        .padding(.top, theme.spacing.navigatorRowPadding)
     }
 
     private var commentCount: Int {

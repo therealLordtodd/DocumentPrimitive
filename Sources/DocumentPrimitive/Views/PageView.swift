@@ -18,6 +18,7 @@ public struct PageView: View {
     @State private var commentDrafts: [CommentID: String] = [:]
     @State private var replyDrafts: [CommentID: String] = [:]
     @Environment(\.pageInlineBlockRenderer) private var pageInlineBlockRenderer
+    @Environment(\.documentTheme) private var theme
     private let page: ComputedPage
     private let documentOverride: Document?
     private let pagesOverride: [ComputedPage]?
@@ -65,24 +66,24 @@ public struct PageView: View {
             height: page.template.size.height,
             alignment: .top
         )
-        .background(.background)
-        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .shadow(color: .black.opacity(0.08), radius: 20, y: 8)
+        .background(theme.colors.background)
+        .clipShape(RoundedRectangle(cornerRadius: theme.metrics.pageCornerRadius, style: .continuous))
+        .shadow(color: .black.opacity(theme.opacity.pageShadowOpacity), radius: theme.shadow.pageRadius, y: theme.shadow.pageY)
         .overlay(alignment: .topTrailing) {
-            VStack(alignment: .trailing, spacing: 8) {
+            VStack(alignment: .trailing, spacing: theme.spacing.imageSpacing) {
                 Text("Page \(page.pageNumber)")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .font(theme.typography.caption2)
+                    .foregroundStyle(theme.colors.secondary)
 
                 if !pageAnnotations.isEmpty {
-                    VStack(alignment: .trailing, spacing: 6) {
+                    VStack(alignment: .trailing, spacing: theme.spacing.annotationBadgeGap) {
                         ForEach(pageAnnotations) { annotation in
                             annotationBadge(annotation)
                         }
                     }
                 }
             }
-            .padding(12)
+            .padding(theme.spacing.annotationPadding)
         }
         .onTapGesture {
             state.currentPage = page.pageNumber
@@ -131,7 +132,7 @@ public struct PageView: View {
                 } else {
                     HStack(alignment: .top, spacing: page.template.columnSpacing) {
                         ForEach(Array(columnPlacements.enumerated()), id: \.offset) { _, placements in
-                            VStack(alignment: .leading, spacing: 10) {
+                            VStack(alignment: .leading, spacing: theme.spacing.columnPlacementSpacing) {
                                 ForEach(placements) { placement in
                                     if sectionBlocks.indices.contains(placement.blockIndex) {
                                         reviewWrappedView(
@@ -152,7 +153,7 @@ public struct PageView: View {
                             .frame(maxWidth: .infinity, alignment: .topLeading)
                         }
                     }
-                    .padding(.vertical, 8)
+                    .padding(.vertical, theme.spacing.pageContentVerticalPadding)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: contentBodyHeight, alignment: .topLeading)
@@ -160,23 +161,23 @@ public struct PageView: View {
 
             if !displayedFootnoteGroups.isEmpty {
                 Divider()
-                    .padding(.vertical, 6)
+                    .padding(.vertical, theme.spacing.footnoteDividerPadding)
 
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: theme.spacing.footnoteSpacing) {
                     ForEach(Array(displayedFootnoteGroups.enumerated()), id: \.offset) { _, group in
                         if let title = group.title {
                             Text(title)
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.secondary)
+                                .font(theme.typography.caption.weight(.semibold))
+                                .foregroundStyle(theme.colors.secondary)
                                 .padding(.top, 2)
                         }
 
                         ForEach(Array(group.footnotes.enumerated()), id: \.offset) { _, footnote in
-                            HStack(alignment: .top, spacing: 6) {
+                            HStack(alignment: .top, spacing: theme.spacing.footnoteMarkerContentGap) {
                                 Text(footnote.marker)
-                                    .font(.caption.weight(.semibold))
-                                    .foregroundStyle(.secondary)
-                                    .frame(minWidth: 24, alignment: .leading)
+                                    .font(theme.typography.caption.weight(.semibold))
+                                    .foregroundStyle(theme.colors.secondary)
+                                    .frame(minWidth: theme.metrics.footnoteMarkerMinWidth, alignment: .leading)
 
                                 previewText(
                                     for: footnote.content,
@@ -195,7 +196,7 @@ public struct PageView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .padding(.horizontal, 18)
+        .padding(.horizontal, theme.spacing.pageContentHorizontalPadding)
     }
 
     @ViewBuilder
@@ -216,7 +217,7 @@ public struct PageView: View {
         } else {
             HStack(alignment: .top, spacing: page.template.columnSpacing) {
                 ForEach(Array(columnPlacements.enumerated()), id: \.offset) { _, placements in
-                    VStack(alignment: .leading, spacing: 10) {
+                    VStack(alignment: .leading, spacing: theme.spacing.columnPlacementSpacing) {
                         ForEach(placements) { placement in
                             if sectionBlocks.indices.contains(placement.blockIndex) {
                                 reviewWrappedView(
@@ -235,7 +236,7 @@ public struct PageView: View {
                     .frame(maxWidth: .infinity, alignment: .topLeading)
                 }
             }
-            .padding(.vertical, 8)
+            .padding(.vertical, theme.spacing.pageContentVerticalPadding)
         }
     }
 
@@ -245,14 +246,14 @@ public struct PageView: View {
         slots: (HeaderFooterSlot, HeaderFooterSlot, HeaderFooterSlot),
         isActive: Bool
     ) -> some View {
-        HStack(spacing: 12) {
+        HStack(spacing: theme.spacing.headerFooterColumnSpacing) {
             headerFooterColumn(runs: content?.left ?? [], slot: slots.0, alignment: .leading, isActive: isActive)
             headerFooterColumn(runs: content?.center ?? [], slot: slots.1, alignment: .center, isActive: isActive)
             headerFooterColumn(runs: content?.right ?? [], slot: slots.2, alignment: .trailing, isActive: isActive)
         }
-        .font(.footnote)
-        .foregroundStyle(.secondary)
-        .padding(.horizontal, 18)
+        .font(theme.typography.footnote)
+        .foregroundStyle(theme.colors.secondary)
+        .padding(.horizontal, theme.spacing.pageContentHorizontalPadding)
     }
 
     @ViewBuilder
@@ -273,9 +274,9 @@ public struct PageView: View {
             .overlay(alignment: alignment) {
                 if runs.isEmpty {
                     Text(slotPlaceholder(for: slot))
-                        .font(.caption2)
+                        .font(theme.typography.caption2)
                         .foregroundStyle(.tertiary)
-                        .padding(.horizontal, 6)
+                        .padding(.horizontal, theme.spacing.continuationChipHorizontalPadding)
                         .allowsHitTesting(false)
                 }
             }
@@ -455,11 +456,11 @@ public struct PageView: View {
 
     private func continuationChip(label: String) -> some View {
         Text(label)
-            .font(.caption2.weight(.semibold))
-            .foregroundStyle(.secondary)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 3)
-            .background(.background.opacity(0.92))
+            .font(theme.typography.caption2.weight(.semibold))
+            .foregroundStyle(theme.colors.secondary)
+            .padding(.horizontal, theme.spacing.continuationChipHorizontalPadding)
+            .padding(.vertical, theme.spacing.continuationChipVerticalPadding)
+            .background(theme.colors.background.opacity(theme.opacity.continuationChipBackground))
             .clipShape(Capsule())
     }
 
@@ -484,26 +485,26 @@ public struct PageView: View {
         content()
             .background {
                 if hasReviewMarkers {
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(tint.opacity(isCurrentComment || isCurrentChange ? 0.12 : 0.07))
-                        .padding(.horizontal, -6)
-                        .padding(.vertical, -4)
+                    RoundedRectangle(cornerRadius: theme.metrics.cardCornerRadius, style: .continuous)
+                        .fill(tint.opacity(isCurrentComment || isCurrentChange ? theme.opacity.reviewHighlightFocusedFill : theme.opacity.reviewHighlightFill))
+                        .padding(.horizontal, -theme.spacing.reviewHighlightHorizontalInset)
+                        .padding(.vertical, -theme.spacing.reviewHighlightVerticalInset)
                 }
             }
             .overlay {
                 if hasReviewMarkers {
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    RoundedRectangle(cornerRadius: theme.metrics.cardCornerRadius, style: .continuous)
                         .stroke(
-                            tint.opacity(isCurrentComment || isCurrentChange ? 0.55 : 0.24),
-                            lineWidth: isCurrentComment || isCurrentChange ? 1.6 : 1
+                            tint.opacity(isCurrentComment || isCurrentChange ? theme.opacity.reviewHighlightFocusedBorder : theme.opacity.reviewHighlightBorder),
+                            lineWidth: isCurrentComment || isCurrentChange ? theme.opacity.reviewHighlightFocusedLineWidth : theme.opacity.reviewHighlightLineWidth
                         )
-                        .padding(.horizontal, -6)
-                        .padding(.vertical, -4)
+                        .padding(.horizontal, -theme.spacing.reviewHighlightHorizontalInset)
+                        .padding(.vertical, -theme.spacing.reviewHighlightVerticalInset)
                 }
             }
             .overlay(alignment: .topTrailing) {
                 if hasReviewMarkers, shouldShowReviewBadge(for: placement) {
-                    HStack(spacing: 6) {
+                    HStack(spacing: theme.spacing.reviewBadgeGap) {
                         if let comment = blockComments.first {
                             Button {
                                 state.focusComment(comment.id)
@@ -511,13 +512,13 @@ public struct PageView: View {
                                 DocumentReviewCountBadge(
                                     systemImage: isCurrentComment ? "text.bubble.fill" : "text.bubble",
                                     label: blockComments.count == 1 ? "1" : "\(blockComments.count)",
-                                    tint: .orange
+                                    tint: theme.colors.commentTint
                                 )
                             }
                             .buttonStyle(.plain)
                             .hoverBadge(
                                 commentHoverText(comment, count: blockComments.count),
-                                style: reviewHoverBadgeStyle(tint: .orange),
+                                style: reviewHoverBadgeStyle(tint: theme.colors.commentTint),
                                 position: .top,
                                 arrow: .bottom
                             )
@@ -542,8 +543,8 @@ public struct PageView: View {
                             )
                         }
                     }
-                    .padding(.top, 6)
-                    .padding(.trailing, 4)
+                    .padding(.top, theme.spacing.reviewBadgeTopPadding)
+                    .padding(.trailing, theme.spacing.reviewBadgeTrailingPadding)
                 }
             }
     }
@@ -562,10 +563,10 @@ public struct PageView: View {
             )
             .padding(.top, level <= 2 ? 8 : 4)
         case let .blockQuote(content):
-            HStack(alignment: .top, spacing: 10) {
-                RoundedRectangle(cornerRadius: 2, style: .continuous)
-                    .fill(Color.secondary.opacity(0.35))
-                    .frame(width: 4)
+            HStack(alignment: .top, spacing: theme.spacing.columnPlacementSpacing) {
+                RoundedRectangle(cornerRadius: theme.metrics.blockquoteBarCornerRadius, style: .continuous)
+                    .fill(theme.colors.blockquoteBar)
+                    .frame(width: theme.metrics.blockquoteBarWidth)
 
                 previewText(for: content, paragraphStyle: paragraphStyle)
             }
@@ -577,24 +578,24 @@ public struct PageView: View {
                     .fontWeight(swiftUIFontWeight(paragraphStyle.fontWeight))
                     .foregroundStyle(paragraphStyle.textColor.swiftUIColor)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(12)
+                    .padding(theme.spacing.codeBlockPadding)
             }
-            .background(Color.secondary.opacity(0.08))
-            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .background(theme.colors.codeBlockBackground)
+            .clipShape(RoundedRectangle(cornerRadius: theme.metrics.codeBlockCornerRadius, style: .continuous))
         case let .list(content, style, indentLevel):
-            HStack(alignment: .top, spacing: 8) {
+            HStack(alignment: .top, spacing: theme.spacing.listBulletContentGap) {
                 Text(listPrefix(for: style))
                     .font(font(for: paragraphStyle, weightOverride: .semibold))
                     .fontWeight(.semibold)
                     .foregroundStyle(paragraphStyle.textColor.swiftUIColor)
-                    .frame(width: 20, alignment: .leading)
+                    .frame(width: theme.metrics.listBulletWidth, alignment: .leading)
 
                 previewText(for: content, paragraphStyle: paragraphStyle)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .padding(.leading, CGFloat(indentLevel) * 18)
+            .padding(.leading, CGFloat(indentLevel) * theme.spacing.listIndentStep)
         case let .table(table):
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: theme.spacing.annotationBadgeGap) {
                 if let caption = table.caption {
                     previewText(
                         for: caption,
@@ -619,43 +620,43 @@ public struct PageView: View {
                                     )
                                 )
                                     .frame(maxWidth: .infinity, alignment: .leading)
-                                    .padding(8)
+                                    .padding(theme.spacing.navigatorRowSpacing)
                                     .overlay {
                                         Rectangle()
-                                            .stroke(Color.secondary.opacity(0.18), lineWidth: 1)
+                                            .stroke(theme.colors.tableBorder, lineWidth: 1)
                                     }
                             }
                         }
                     }
                 }
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: theme.metrics.tableCornerRadius, style: .continuous))
             }
         case let .image(content):
-            VStack(spacing: 8) {
+            VStack(spacing: theme.spacing.imageSpacing) {
                 imagePreview(for: content)
 
                 if let altText = content.altText, !altText.isEmpty {
                     Text(altText)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(theme.typography.caption)
+                        .foregroundStyle(theme.colors.secondary)
                 }
             }
         case .divider:
             Divider()
                 .padding(.vertical, 8)
         case let .embed(embed):
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: theme.spacing.annotationBadgeGap) {
                 Text(embed.kind.uppercased())
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(.secondary)
+                    .font(theme.typography.caption2.weight(.semibold))
+                    .foregroundStyle(theme.colors.secondary)
                 previewText(
                     for: .plain(embed.payload ?? "[Embedded content]"),
                     paragraphStyle: paragraphStyle
                 )
             }
-            .padding(12)
-            .background(Color.secondary.opacity(0.06))
-            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .padding(theme.spacing.embedPadding)
+            .background(theme.colors.embedBackground)
+            .clipShape(RoundedRectangle(cornerRadius: theme.metrics.codeBlockCornerRadius, style: .continuous))
         }
     }
 
@@ -697,7 +698,7 @@ public struct PageView: View {
         } else if paragraphStyle.textColor != ColorValue(red: 0, green: 0, blue: 0) {
             text = text.foregroundColor(paragraphStyle.textColor.swiftUIColor)
         } else if run.attributes.link != nil {
-            text = text.foregroundColor(.blue)
+            text = text.foregroundColor(theme.colors.linkColor)
         }
 
         return text
@@ -716,7 +717,7 @@ public struct PageView: View {
                 .resizable()
                 .scaledToFit()
                 .frame(maxWidth: .infinity, maxHeight: previewHeight)
-                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: theme.metrics.imageCornerRadius, style: .continuous))
         } else if let url = content.url {
             AsyncImage(url: url) { phase in
                 switch phase {
@@ -733,7 +734,7 @@ public struct PageView: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: previewHeight)
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: theme.metrics.imageCornerRadius, style: .continuous))
         } else {
             placeholderImagePreview(height: previewHeight, label: nil)
         }
@@ -741,23 +742,23 @@ public struct PageView: View {
 
     @ViewBuilder
     private func placeholderImagePreview(height: CGFloat, label: String?) -> some View {
-        RoundedRectangle(cornerRadius: 14, style: .continuous)
+        RoundedRectangle(cornerRadius: theme.metrics.imageCornerRadius, style: .continuous)
             .fill(LinearGradient(
-                colors: [Color.secondary.opacity(0.14), Color.secondary.opacity(0.05)],
+                colors: [theme.colors.placeholderGradientStart, theme.colors.placeholderGradientEnd],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             ))
             .frame(height: height)
             .overlay {
-                VStack(spacing: 8) {
+                VStack(spacing: theme.spacing.imageSpacing) {
                     Image(systemName: "photo")
-                        .font(.system(size: 28))
-                        .foregroundStyle(.secondary)
+                        .font(theme.typography.placeholderIcon)
+                        .foregroundStyle(theme.colors.secondary)
 
                     if let label {
                         Text(label)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .font(theme.typography.caption)
+                            .foregroundStyle(theme.colors.secondary)
                     }
                 }
             }
@@ -1012,7 +1013,7 @@ public struct PageView: View {
     @ViewBuilder
     private var reviewDeck: some View {
         ViewThatFits(in: .horizontal) {
-            HStack(alignment: .top, spacing: 10) {
+            HStack(alignment: .top, spacing: theme.spacing.reviewDeckSpacing) {
                 if let comment = pageReviewComment {
                     commentReviewCard(comment)
                 }
@@ -1021,7 +1022,7 @@ public struct PageView: View {
                 }
             }
 
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: theme.spacing.reviewDeckSpacing) {
                 if let comment = pageReviewComment {
                     commentReviewCard(comment)
                 }
@@ -1030,8 +1031,8 @@ public struct PageView: View {
                 }
             }
         }
-        .padding(.top, 8)
-        .padding(.bottom, 6)
+        .padding(.top, theme.spacing.reviewDeckTopPadding)
+        .padding(.bottom, theme.spacing.reviewDeckBottomPadding)
     }
 
     private func commentReviewCard(_ comment: Comment) -> some View {
@@ -1039,18 +1040,18 @@ public struct PageView: View {
         let bodyDraft = commentBodyBinding(for: comment)
         let replyDraft = replyBodyBinding(for: comment)
 
-        return VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
+        return VStack(alignment: .leading, spacing: theme.spacing.navigatorRowSpacing) {
+            HStack(spacing: theme.spacing.navigatorRowSpacing) {
                 Label(comment.status == .open ? "Comment" : "Resolved Comment", systemImage: "text.bubble.fill")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.orange)
+                    .font(theme.typography.caption.weight(.semibold))
+                    .foregroundStyle(theme.colors.commentTint)
 
                 Spacer(minLength: 0)
 
                 if isFocused {
                     Text("Focused")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.orange)
+                        .font(theme.typography.caption2.weight(.semibold))
+                        .foregroundStyle(theme.colors.commentTint)
                 }
             }
 
@@ -1059,7 +1060,7 @@ public struct PageView: View {
                 .lineLimit(2 ... 4)
 
             if commentBodyDraft(for: comment) != comment.body {
-                HStack(spacing: 8) {
+                HStack(spacing: theme.spacing.navigatorRowSpacing) {
                     Button("Save") {
                         saveCommentEdits(comment)
                     }
@@ -1072,25 +1073,25 @@ public struct PageView: View {
 
                     Spacer(minLength: 0)
                 }
-                .font(.caption)
+                .font(theme.typography.caption)
             }
 
             if !comment.replies.isEmpty {
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: theme.spacing.annotationBadgeGap) {
                     ForEach(comment.replies) { reply in
-                        VStack(alignment: .leading, spacing: 3) {
+                        VStack(alignment: .leading, spacing: theme.spacing.continuationChipVerticalPadding) {
                             Text(reply.author.rawValue)
-                                .font(.caption2.weight(.semibold))
-                                .foregroundStyle(.secondary)
+                                .font(theme.typography.caption2.weight(.semibold))
+                                .foregroundStyle(theme.colors.secondary)
 
                             Text(reply.body)
-                                .font(.caption)
+                                .font(theme.typography.caption)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
-                        .padding(8)
+                        .padding(theme.spacing.navigatorRowSpacing)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Color.secondary.opacity(0.06))
-                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        .background(theme.subtleFill)
+                        .clipShape(RoundedRectangle(cornerRadius: theme.metrics.tableCornerRadius, style: .continuous))
                     }
                 }
             }
@@ -1100,7 +1101,7 @@ public struct PageView: View {
                     .textFieldStyle(.roundedBorder)
                     .lineLimit(1 ... 3)
 
-                HStack(spacing: 8) {
+                HStack(spacing: theme.spacing.navigatorRowSpacing) {
                     Button("Reply") {
                         sendReply(for: comment)
                     }
@@ -1109,10 +1110,10 @@ public struct PageView: View {
 
                     Spacer(minLength: 0)
                 }
-                .font(.caption)
+                .font(theme.typography.caption)
             }
 
-            HStack(spacing: 8) {
+            HStack(spacing: theme.spacing.navigatorRowSpacing) {
                 Button("Open") {
                     state.focusComment(comment.id)
                 }
@@ -1146,43 +1147,43 @@ public struct PageView: View {
                     .buttonStyle(.borderless)
                 }
             }
-            .font(.caption)
+            .font(theme.typography.caption)
         }
-        .padding(12)
+        .padding(theme.spacing.reviewCardPadding)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.orange.opacity(0.08))
+        .background(theme.colors.commentTint.opacity(theme.opacity.reviewCardFill))
         .overlay {
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(Color.orange.opacity(0.18), lineWidth: 1)
+            RoundedRectangle(cornerRadius: theme.metrics.cardCornerRadius, style: .continuous)
+                .stroke(theme.colors.commentTint.opacity(theme.opacity.reviewCardBorder), lineWidth: 1)
         }
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: theme.metrics.cardCornerRadius, style: .continuous))
     }
 
     private func trackedChangeReviewCard(_ change: TrackedChange) -> some View {
         let tint = changeTint(for: change)
         let isFocused = state.currentTrackedChange?.id == change.id
 
-        return VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
+        return VStack(alignment: .leading, spacing: theme.spacing.navigatorRowSpacing) {
+            HStack(spacing: theme.spacing.navigatorRowSpacing) {
                 Label("Tracked Change", systemImage: changeIcon(for: change))
-                    .font(.caption.weight(.semibold))
+                    .font(theme.typography.caption.weight(.semibold))
                     .foregroundStyle(tint)
 
                 Spacer(minLength: 0)
 
                 if isFocused {
                     Text("Focused")
-                        .font(.caption2.weight(.semibold))
+                        .font(theme.typography.caption2.weight(.semibold))
                         .foregroundStyle(tint)
                 }
             }
 
             Text(changeSummary(change))
-                .font(.footnote)
+                .font(theme.typography.footnote)
                 .lineLimit(2)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-            HStack(spacing: 8) {
+            HStack(spacing: theme.spacing.navigatorRowSpacing) {
                 Button("Open") {
                     state.focusChange(change.id)
                 }
@@ -1214,16 +1215,16 @@ public struct PageView: View {
                 }
                 .buttonStyle(.borderless)
             }
-            .font(.caption)
+            .font(theme.typography.caption)
         }
-        .padding(12)
+        .padding(theme.spacing.reviewCardPadding)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(tint.opacity(0.08))
+        .background(tint.opacity(theme.opacity.reviewCardFill))
         .overlay {
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(tint.opacity(0.18), lineWidth: 1)
+            RoundedRectangle(cornerRadius: theme.metrics.cardCornerRadius, style: .continuous)
+                .stroke(tint.opacity(theme.opacity.reviewCardBorder), lineWidth: 1)
         }
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: theme.metrics.cardCornerRadius, style: .continuous))
     }
 
     private var pageReviewComment: Comment? {
@@ -1265,7 +1266,7 @@ public struct PageView: View {
                 PageAnnotation(
                     title: comment.body,
                     icon: "text.bubble.fill",
-                    tint: .orange,
+                    tint: theme.colors.commentTint,
                     action: { state.focusComment(comment.id) }
                 )
             }
@@ -1297,7 +1298,7 @@ public struct PageView: View {
                 PageAnnotation(
                     title: insertions == 1 ? "1 insertion" : "\(insertions) insertions",
                     icon: "plus.circle.fill",
-                    tint: .green,
+                    tint: theme.colors.insertionTint,
                     action: { state.focusFirstChange(on: page) }
                 )
             )
@@ -1307,7 +1308,7 @@ public struct PageView: View {
                 PageAnnotation(
                     title: deletions == 1 ? "1 deletion" : "\(deletions) deletions",
                     icon: "minus.circle.fill",
-                    tint: .red,
+                    tint: theme.colors.deletionTint,
                     action: { state.focusFirstChange(on: page) }
                 )
             )
@@ -1317,7 +1318,7 @@ public struct PageView: View {
                 PageAnnotation(
                     title: formatChanges == 1 ? "1 format change" : "\(formatChanges) format changes",
                     icon: "paintbrush.fill",
-                    tint: .teal,
+                    tint: theme.colors.formatChangeTint,
                     action: { state.focusFirstChange(on: page) }
                 )
             )
@@ -1353,7 +1354,7 @@ public struct PageView: View {
                 annotationBadgeLabel(annotation)
             }
         }
-        .frame(maxWidth: 180, alignment: .trailing)
+        .frame(maxWidth: theme.metrics.annotationBadgeMaxWidth, alignment: .trailing)
     }
 
     private func annotationBadgeLabel(_ annotation: PageAnnotation) -> some View {
@@ -1390,17 +1391,17 @@ public struct PageView: View {
         HoverBadgeStyle(
             backgroundColor: tint.opacity(0.16),
             textColor: tint,
-            font: .caption,
-            horizontalPadding: 10,
-            verticalPadding: 6,
-            cornerStyle: .rounded(10),
+            font: theme.typography.caption,
+            horizontalPadding: theme.spacing.scopeChipHorizontalPadding,
+            verticalPadding: theme.spacing.scopeChipVerticalPadding,
+            cornerStyle: .rounded(theme.metrics.codeBlockCornerRadius),
             borderColor: tint.opacity(0.2),
             borderWidth: 1,
             shadowColor: .clear,
             shadowRadius: 0,
             shadowY: 0,
-            animationDuration: 0.16,
-            offset: 8
+            animationDuration: theme.hoverBadgeAnimationDuration,
+            offset: theme.spacing.navigatorRowSpacing
         )
     }
 
@@ -1411,28 +1412,28 @@ public struct PageView: View {
         isCurrentChange: Bool
     ) -> Color {
         if isCurrentComment {
-            return .orange
+            return theme.colors.commentTint
         }
         if isCurrentChange, let currentTrackedChange = state.currentTrackedChange {
             return changeTint(for: currentTrackedChange)
         }
         if !comments.isEmpty && changes.isEmpty {
-            return .orange
+            return theme.colors.commentTint
         }
         if comments.isEmpty, let firstChange = changes.first {
             return changeTint(for: firstChange)
         }
-        return .secondary
+        return theme.colors.secondary
     }
 
     private func changeTint(for change: TrackedChange) -> Color {
         switch change.type {
         case .insertion:
-            return .green
+            return theme.colors.insertionTint
         case .deletion:
-            return .red
+            return theme.colors.deletionTint
         case .formatChange:
-            return .teal
+            return theme.colors.formatChangeTint
         }
     }
 

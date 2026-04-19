@@ -2,21 +2,25 @@ import BadgePrimitive
 import SwiftUI
 
 enum DocumentBadgeStyles {
-    static let metadata = BadgeStyle(
-        color: Color.secondary.opacity(0.14),
-        textColor: .secondary,
-        size: .medium,
-        shape: .capsule,
-        animation: .none
-    )
+    static func metadata(theme: DocumentTheme) -> BadgeStyle {
+        BadgeStyle(
+            color: theme.colors.secondary.opacity(0.14),
+            textColor: theme.colors.secondary,
+            size: .medium,
+            shape: .capsule,
+            animation: .none
+        )
+    }
 
-    static let page = BadgeStyle(
-        color: Color.secondary.opacity(0.16),
-        textColor: .secondary,
-        size: .medium,
-        shape: .capsule,
-        animation: .none
-    )
+    static func page(theme: DocumentTheme) -> BadgeStyle {
+        BadgeStyle(
+            color: theme.colors.secondary.opacity(0.16),
+            textColor: theme.colors.secondary,
+            size: .medium,
+            shape: .capsule,
+            animation: .none
+        )
+    }
 
     static func review(tint: Color) -> BadgeStyle {
         BadgeStyle(
@@ -31,17 +35,19 @@ enum DocumentBadgeStyles {
 
 struct DocumentMetadataBadge: View {
     let text: String
+    @Environment(\.documentTheme) private var theme
 
     var body: some View {
-        BadgeView(.text(text), style: DocumentBadgeStyles.metadata)
+        BadgeView(.text(text), style: DocumentBadgeStyles.metadata(theme: theme))
     }
 }
 
 struct DocumentPageBadge: View {
     let pageNumber: Int
+    @Environment(\.documentTheme) private var theme
 
     var body: some View {
-        BadgeView(.text("p.\(pageNumber)"), style: DocumentBadgeStyles.page)
+        BadgeView(.text("p.\(pageNumber)"), style: DocumentBadgeStyles.page(theme: theme))
     }
 }
 

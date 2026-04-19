@@ -5,6 +5,7 @@ import SwiftUI
 
 @MainActor
 public struct DocumentAttachmentPreview: View {
+    @Environment(\.documentTheme) private var theme
     private let attachment: DocumentPreviewAttachment
     private let showFileInfo: Bool
     private let showsPresentationSwitcher: Bool
@@ -34,23 +35,23 @@ public struct DocumentAttachmentPreview: View {
     }
 
     public var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: theme.spacing.attachmentPreviewSpacing) {
             FilePreview(
                 item: attachment.previewItem,
                 showFileInfo: showFileInfo,
                 presentation: .rendered,
                 showsPresentationSwitcher: showsPresentationSwitcher
             )
-            .frame(minHeight: 240)
+            .frame(minHeight: theme.metrics.attachmentPreviewMinHeight)
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: theme.spacing.attachmentTitleCaptionSpacing) {
                 Text(attachment.title)
-                    .font(.headline)
+                    .font(theme.typography.attachmentTitle)
 
                 if let caption = attachment.caption {
                     Text(caption)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(theme.typography.caption)
+                        .foregroundStyle(theme.colors.secondary)
                 }
             }
         }

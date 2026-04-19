@@ -5,6 +5,7 @@ import SwiftUI
 
 public struct DocumentEditor: View {
     @Bindable private var state: DocumentEditorState
+    @Environment(\.documentTheme) private var theme
 
     public init(state: DocumentEditorState) {
         self.state = state
@@ -45,10 +46,10 @@ public struct DocumentEditor: View {
                 PrintPreview(state: state)
             case .continuous, .canvas:
                 ScrollView {
-                    VStack(spacing: 20) {
+                    VStack(spacing: theme.spacing.sectionGap) {
                         ForEach(state.document.sections) { section in
                             let sectionEditorState = state.richTextState(forSection: section.id)
-                            HStack(alignment: .top, spacing: 12) {
+                            HStack(alignment: .top, spacing: theme.spacing.reorderHandleGap) {
                                 SectionReorderHandle(section: section)
 
                                 RichTextEditor(
@@ -57,11 +58,11 @@ public struct DocumentEditor: View {
                                     styleSheet: styleSheet,
                                     showsBlockNavigator: true
                                 )
-                                .frame(minHeight: 220)
+                                .frame(minHeight: theme.metrics.sectionMinHeight)
                                 .padding()
-                                .background(.background)
-                                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                                .shadow(color: .black.opacity(0.05), radius: 12, y: 6)
+                                .background(theme.colors.background)
+                                .clipShape(RoundedRectangle(cornerRadius: theme.metrics.sectionCardCornerRadius, style: .continuous))
+                                .shadow(color: .black.opacity(theme.opacity.sectionShadowOpacity), radius: theme.shadow.sectionRadius, y: theme.shadow.sectionY)
                                 .onChange(of: sectionEditorState.selection) { _, _ in
                                     state.syncCurrentLocation(using: sectionEditorState)
                                 }
@@ -72,9 +73,9 @@ public struct DocumentEditor: View {
                         }
                     }
                     .reorderable(items: sectionBinding) { _ in }
-                    .padding(24)
+                    .padding(theme.spacing.containerPadding)
                 }
-                .background(Color.secondary.opacity(0.05))
+                .background(Color.secondary.opacity(theme.opacity.canvasFill))
             }
         }
     }
@@ -95,14 +96,15 @@ public struct DocumentEditor: View {
 
 private struct SectionReorderHandle: View {
     let section: DocumentSection
+    @Environment(\.documentTheme) private var theme
 
     var body: some View {
         Image(systemName: "line.3.horizontal")
             .font(.body.weight(.semibold))
-            .foregroundStyle(.secondary)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 12)
-            .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .foregroundStyle(theme.colors.secondary)
+            .padding(.horizontal, theme.spacing.reorderHandleHorizontalPadding)
+            .padding(.vertical, theme.spacing.reorderHandleVerticalPadding)
+            .background(theme.mutedFill, in: RoundedRectangle(cornerRadius: theme.metrics.reorderHandleCornerRadius, style: .continuous))
             .vantageDraggable(
                 DragItem(
                     content: section.id.rawValue,
@@ -118,6 +120,7 @@ private struct SectionReorderHandle: View {
 private struct DocumentRulerView: View {
     let snapshot: DocumentRulerSnapshot
     let onMoveMarker: (RulerMarkerItem, CGFloat) -> Void
+    @Environment(\.documentTheme) private var theme
 
     var body: some View {
         GeometryReader { proxy in
@@ -134,20 +137,20 @@ private struct DocumentRulerView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
-        .frame(height: 34)
-        .background(Color.secondary.opacity(0.08))
+        .frame(height: theme.metrics.rulerHeight)
+        .background(theme.mutedFill)
     }
 
     private func tickView(_ tick: RulerTick) -> some View {
         VStack(spacing: 1) {
             Rectangle()
-                .fill(tick.isMajor ? Color.secondary : Color.secondary.opacity(0.45))
+                .fill(tick.isMajor ? theme.colors.secondary : theme.colors.secondary.opacity(theme.opacity.rulerTickMinor))
                 .frame(width: 1, height: tick.isMajor ? 14 : 8)
 
             if let label = tick.label {
                 Text(label)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .font(theme.typography.caption2)
+                    .foregroundStyle(theme.colors.secondary)
                     .fixedSize()
             }
         }
@@ -162,13 +165,13 @@ private struct DocumentRulerView: View {
         let x = min(max(marker.position * scale, 0), width)
 
         return Image(systemName: icon(for: marker.markerType))
-            .font(.caption2.weight(.semibold))
-            .foregroundStyle(marker.isDraggable ? Color.accentColor : Color.secondary)
+            .font(theme.typography.caption2.weight(.semibold))
+            .foregroundStyle(marker.isDraggable ? theme.colors.accent : theme.colors.secondary)
             .padding(3)
             .background(.thinMaterial, in: Capsule())
             .overlay(
                 Capsule()
-                    .strokeBorder(Color.secondary.opacity(0.25), lineWidth: 0.5)
+                    .strokeBorder(theme.colors.secondary.opacity(theme.opacity.rulerMarkerBorder), lineWidth: 0.5)
             )
             .position(x: x, y: 24)
             .gesture(

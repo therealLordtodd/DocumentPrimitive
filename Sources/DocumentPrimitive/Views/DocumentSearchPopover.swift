@@ -5,13 +5,14 @@ struct DocumentSearchPopover: View {
     @Bindable private var state: DocumentEditorState
     @State private var searchResults = DocumentSearchNavigatorResults(items: [], totalCount: 0, facetCounts: [:])
     @State private var isSearching = false
+    @Environment(\.documentTheme) private var theme
 
     init(state: DocumentEditorState) {
         self._state = Bindable(wrappedValue: state)
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: theme.spacing.popoverContentSpacing) {
             header
 
             TextField("Search headings, comments, bookmarks, and changes", text: $state.documentSearchText)
@@ -28,7 +29,7 @@ struct DocumentSearchPopover: View {
                 emptyState
             } else {
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 8) {
+                    LazyVStack(alignment: .leading, spacing: theme.spacing.navigatorRowSpacing) {
                         ForEach(searchResults.items) { item in
                             resultRow(item)
                         }
@@ -37,8 +38,8 @@ struct DocumentSearchPopover: View {
                 }
             }
         }
-        .padding(16)
-        .frame(width: 430, height: 520)
+        .padding(theme.spacing.popoverPadding)
+        .frame(width: theme.metrics.popoverWidth, height: theme.metrics.popoverHeight)
         .task(id: refreshToken) {
             await refreshResults()
         }
@@ -48,10 +49,10 @@ struct DocumentSearchPopover: View {
         HStack(alignment: .firstTextBaseline) {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Search Document")
-                    .font(.headline)
+                    .font(theme.typography.headline)
                 Text(summaryText)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(theme.typography.caption)
+                    .foregroundStyle(theme.colors.secondary)
             }
 
             Spacer()
@@ -68,7 +69,7 @@ struct DocumentSearchPopover: View {
 
     private var scopeChips: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
+            HStack(spacing: theme.spacing.scopeChipGap) {
                 scopeChip(scope: nil, label: "All", count: totalFacetCount)
                 ForEach(DocumentSearchScope.allCases, id: \.rawValue) { scope in
                     scopeChip(scope: scope, label: scope.label, count: searchResults.facetCounts[scope] ?? 0)
@@ -87,24 +88,24 @@ struct DocumentSearchPopover: View {
         return Button {
             state.selectedDocumentSearchScope = isSelected ? nil : scope
         } label: {
-            HStack(spacing: 6) {
+            HStack(spacing: theme.spacing.annotationBadgeGap) {
                 if let scope {
                     Image(systemName: scope.systemImage)
                 }
                 Text(label)
                 Text("\(count)")
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(isSelected ? Color.accentColor : .secondary)
+                    .font(theme.typography.caption2.weight(.semibold))
+                    .foregroundStyle(isSelected ? theme.colors.accent : theme.colors.secondary)
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
+            .padding(.horizontal, theme.spacing.scopeChipHorizontalPadding)
+            .padding(.vertical, theme.spacing.scopeChipVerticalPadding)
             .background(
                 Capsule()
-                    .fill(isSelected ? Color.accentColor.opacity(0.14) : Color.secondary.opacity(0.08))
+                    .fill(isSelected ? theme.colors.accent.opacity(theme.opacity.selectedFill + 0.02) : theme.mutedFill)
             )
             .overlay(
                 Capsule()
-                    .stroke(isSelected ? Color.accentColor.opacity(0.35) : Color.secondary.opacity(0.18))
+                    .stroke(isSelected ? theme.colors.accent.opacity(theme.opacity.scopeChipSelectedBorder) : theme.colors.secondary.opacity(theme.opacity.scopeChipBorder))
             )
         }
         .buttonStyle(.plain)
@@ -117,15 +118,15 @@ struct DocumentSearchPopover: View {
         return Button {
             state.focusDocumentSearchResult(item)
         } label: {
-            HStack(alignment: .top, spacing: 12) {
+            HStack(alignment: .top, spacing: theme.spacing.navigatorRowIconGap) {
                 Image(systemName: item.systemImage)
-                    .foregroundStyle(isFocused ? Color.accentColor : .secondary)
-                    .frame(width: 18)
+                    .foregroundStyle(isFocused ? theme.colors.accent : theme.colors.secondary)
+                    .frame(width: theme.metrics.navigatorIconWidth)
 
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                VStack(alignment: .leading, spacing: theme.spacing.annotationBadgeGap) {
+                    HStack(alignment: .firstTextBaseline, spacing: theme.spacing.navigatorRowSpacing) {
                         Text(item.title)
-                            .font(.subheadline.weight(.medium))
+                            .font(theme.typography.rowTitle)
                             .foregroundStyle(.primary)
                             .multilineTextAlignment(.leading)
                             .lineLimit(2)
@@ -138,18 +139,18 @@ struct DocumentSearchPopover: View {
                     }
 
                     Text(item.subtitle)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(theme.typography.caption)
+                        .foregroundStyle(theme.colors.secondary)
                         .lineLimit(2)
 
                     if let snippet = item.snippet, !snippet.isEmpty {
                         Text(snippet)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .font(theme.typography.caption)
+                            .foregroundStyle(theme.colors.secondary)
                             .lineLimit(3)
                     }
 
-                    HStack(spacing: 6) {
+                    HStack(spacing: theme.spacing.annotationBadgeGap) {
                         DocumentMetadataBadge(text: item.statusLabel)
                         if let score = item.score {
                             DocumentMetadataBadge(
@@ -161,29 +162,29 @@ struct DocumentSearchPopover: View {
 
                 if isFocused {
                     Image(systemName: "location.fill")
-                        .font(.caption)
-                        .foregroundStyle(Color.accentColor)
+                        .font(theme.typography.caption)
+                        .foregroundStyle(theme.colors.accent)
                 }
             }
-            .padding(12)
+            .padding(theme.spacing.navigatorRowPadding)
             .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(isFocused ? Color.accentColor.opacity(0.12) : Color.secondary.opacity(0.06))
+                RoundedRectangle(cornerRadius: theme.metrics.cardCornerRadius)
+                    .fill(isFocused ? theme.selectedFill : theme.subtleFill)
             )
         }
         .buttonStyle(.plain)
     }
 
     private var emptyState: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: theme.spacing.annotationBadgeGap) {
             Text(emptyTitle)
-                .font(.subheadline.weight(.medium))
+                .font(theme.typography.rowTitle)
             Text(emptyMessage)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .font(theme.typography.caption)
+                .foregroundStyle(theme.colors.secondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .padding(.top, 12)
+        .padding(.top, theme.spacing.navigatorRowPadding)
     }
 
     private func refreshResults() async {

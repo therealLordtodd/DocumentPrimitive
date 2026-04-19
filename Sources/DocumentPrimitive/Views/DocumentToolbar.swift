@@ -5,13 +5,14 @@ public struct DocumentToolbar: View {
     @Bindable private var state: DocumentEditorState
     @State private var showingSearchNavigator = false
     @State private var showingReviewNavigator = false
+    @Environment(\.documentTheme) private var theme
 
     public init(state: DocumentEditorState) {
         self.state = state
     }
 
     public var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: theme.spacing.toolbarItemSpacing) {
             Picker("View", selection: $state.viewMode) {
                 Text("Page").tag(DocumentViewMode.page)
                 Text("Continuous").tag(DocumentViewMode.continuous)
@@ -81,7 +82,7 @@ public struct DocumentToolbar: View {
 
             Spacer()
 
-            HStack(spacing: 8) {
+            HStack(spacing: theme.spacing.toolbarGroupSpacing) {
                 Button {
                     state.goToPreviousChange()
                 } label: {
@@ -91,9 +92,9 @@ public struct DocumentToolbar: View {
                 .disabled(changeCount == 0)
 
                 Text(changeCountLabel)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .frame(minWidth: 72, alignment: .center)
+                    .font(theme.typography.toolbarLabel)
+                    .foregroundStyle(theme.colors.secondary)
+                    .frame(minWidth: theme.metrics.changeCountMinWidth, alignment: .center)
 
                 Button {
                     state.goToNextChange()
@@ -105,10 +106,10 @@ public struct DocumentToolbar: View {
 
                 if let currentChangeSummary = state.currentTrackedChangeSummary {
                     Text(currentChangeSummary)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(theme.typography.toolbarLabel)
+                        .foregroundStyle(theme.colors.secondary)
                         .lineLimit(1)
-                        .frame(minWidth: 110, maxWidth: 180, alignment: .leading)
+                        .frame(minWidth: theme.metrics.changeSummaryMinWidth, maxWidth: theme.metrics.changeSummaryMaxWidth, alignment: .leading)
                 }
 
                 Button {
@@ -156,7 +157,7 @@ public struct DocumentToolbar: View {
                 .disabled(changeCount == 0)
             }
 
-            HStack(spacing: 8) {
+            HStack(spacing: theme.spacing.toolbarGroupSpacing) {
                 Button {
                     state.goToPreviousPage()
                 } label: {
@@ -166,8 +167,8 @@ public struct DocumentToolbar: View {
                 .disabled(!state.canGoToPreviousPage)
 
                 Text("Page \(state.currentPage)")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(theme.typography.toolbarLabel)
+                    .foregroundStyle(theme.colors.secondary)
 
                 Button {
                     state.goToNextPage()
@@ -178,8 +179,8 @@ public struct DocumentToolbar: View {
                 .disabled(!state.canGoToNextPage)
             }
         }
-        .padding(.horizontal)
-        .padding(.vertical, 8)
+        .padding(.horizontal, theme.spacing.toolbarHorizontalPadding)
+        .padding(.vertical, theme.spacing.toolbarVerticalPadding)
     }
 
     private var changeCount: Int {
