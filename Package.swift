@@ -1,6 +1,25 @@
 // swift-tools-version: 6.0
 
+import Foundation
 import PackageDescription
+
+private let anselDependency: Package.Dependency = {
+    let localPath = "../Ansel"
+    let dir = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+    if FileManager.default.fileExists(atPath: dir.appendingPathComponent(localPath).path) {
+        return .package(path: localPath)
+    }
+    return .package(url: "https://github.com/therealLordtodd/Ansel.git", branch: "main")
+}()
+
+private let marpleDependency: Package.Dependency = {
+    let localPath = "../Marple"
+    let dir = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+    if FileManager.default.fileExists(atPath: dir.appendingPathComponent(localPath).path) {
+        return .package(path: localPath)
+    }
+    return .package(url: "https://github.com/therealLordtodd/Marple.git", branch: "main")
+}()
 
 let package = Package(
     name: "DocumentPrimitive",
@@ -13,6 +32,8 @@ let package = Package(
         .library(name: "DocumentPrimitiveGrid", targets: ["DocumentPrimitiveGrid"]),
         .library(name: "DocumentPrimitiveExport", targets: ["DocumentPrimitiveExport"]),
         .library(name: "DocumentPrimitivePreview", targets: ["DocumentPrimitivePreview"]),
+        .library(name: "DocumentPrimitiveCapture", targets: ["DocumentPrimitiveCapture"]),
+        .library(name: "DocumentPrimitiveMarple", targets: ["DocumentPrimitiveMarple"]),
     ],
     dependencies: [
         .package(path: "../RichTextPrimitive"),
@@ -29,6 +50,8 @@ let package = Package(
         .package(path: "../TrackChangesPrimitive"),
         .package(path: "../BookmarkPrimitive"),
         .package(path: "../ExportKit"),
+        anselDependency,
+        marpleDependency,
     ],
     targets: [
         .target(
@@ -77,6 +100,20 @@ let package = Package(
                 "DocumentPrimitive",
                 .product(name: "RichTextPrimitive", package: "RichTextPrimitive"),
                 .product(name: "FilePreviewPrimitive", package: "PreviewPrimitive"),
+            ]
+        ),
+        .target(
+            name: "DocumentPrimitiveCapture",
+            dependencies: [
+                "DocumentPrimitive",
+                .product(name: "Ansel", package: "Ansel"),
+            ]
+        ),
+        .target(
+            name: "DocumentPrimitiveMarple",
+            dependencies: [
+                "DocumentPrimitive",
+                .product(name: "MarpleCore", package: "Marple"),
             ]
         ),
         .testTarget(
