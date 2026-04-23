@@ -41,7 +41,7 @@ DocumentPrimitive is the first-class word processor layer built on `RichTextPrim
 This primitive is a member of the Document Editor primitive family. It participates in shared conventions and consumes or publishes cross-primitive types used by the rich-text / document / editor stack.
 
 **Before modifying public API, shared conventions, or cross-primitive types, consult:**
-- `/Users/todd/Programming/Packages/docs/plans/2026-04-19-document-editor-dependency-audit.md` — who depends on whom, who uses which conventions
+- `../RichTextEditorKit/docs/plans/2026-04-19-document-editor-dependency-audit.md` — who depends on whom, who uses which conventions
 - `/Users/todd/Programming/Packages/CONVENTIONS/` — shared patterns this primitive participates in
 - `./MEMBERSHIP.md` in this primitive's root — specific list of conventions, shared types, and sibling consumers
 

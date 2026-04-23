@@ -33,7 +33,7 @@ This primitive is a member of the Document Editor primitive family. It sits at t
 2. Changes to document-structural types: affects RichTextEditorKit and hosts consuming the document data model.
 3. Changes to how DocumentPrimitive composes siblings (pagination, rulers, anchors): can break rendering in every host.
 4. Adding a new sub-dependency: widens the umbrella's ripple surface — coordinate with RichTextEditorKit's re-exports.
-5. Consult [dependency audit](../docs/plans/2026-04-19-document-editor-dependency-audit.md) §2 (the full import list is in DocumentPrimitive's Package.swift).
+5. Consult [dependency audit](../RichTextEditorKit/docs/plans/2026-04-19-document-editor-dependency-audit.md) §2 (the full import list is in DocumentPrimitive's Package.swift).
 6. Document ripple impact in the commit/PR.
 
 ## Scope of Membership
