@@ -44,7 +44,7 @@ let package = Package(
         .package(path: "../SearchPrimitive"),
         .package(path: "../BadgePrimitive"),
         .package(path: "../HoverBadgePrimitive"),
-        .package(path: "../PreviewPrimitive"),
+        .package(path: "../FilePreviewPrimitive"),
         .package(path: "../RulerPrimitive"),
         .package(path: "../CommentPrimitive"),
         .package(path: "../TrackChangesPrimitive"),
@@ -99,7 +99,7 @@ let package = Package(
             dependencies: [
                 "DocumentPrimitive",
                 .product(name: "RichTextPrimitive", package: "RichTextPrimitive"),
-                .product(name: "FilePreviewPrimitive", package: "PreviewPrimitive"),
+                .product(name: "FilePreviewPrimitive", package: "FilePreviewPrimitive"),
             ]
         ),
         .target(
