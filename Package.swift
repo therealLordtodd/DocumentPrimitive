@@ -33,7 +33,7 @@ let package = Package(
         .library(name: "DocumentPrimitiveExport", targets: ["DocumentPrimitiveExport"]),
         .library(name: "DocumentPrimitivePreview", targets: ["DocumentPrimitivePreview"]),
         .library(name: "DocumentPrimitiveCapture", targets: ["DocumentPrimitiveCapture"]),
-        .library(name: "DocumentPrimitiveMarple", targets: ["DocumentPrimitiveMarple"]),
+        .library(name: "DocumentPrimitiveMarpleProbes", targets: ["DocumentPrimitiveMarpleProbes"]),
     ],
     dependencies: [
         .package(path: "../RichTextPrimitive"),
@@ -110,7 +110,7 @@ let package = Package(
             ]
         ),
         .target(
-            name: "DocumentPrimitiveMarple",
+            name: "DocumentPrimitiveMarpleProbes",
             dependencies: [
                 "DocumentPrimitive",
                 .product(name: "MarpleCore", package: "Marple"),
