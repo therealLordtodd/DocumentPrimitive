@@ -24,7 +24,7 @@ private let marpleDependency: Package.Dependency = {
 let package = Package(
     name: "DocumentPrimitive",
     platforms: [
-        .macOS(.v15),
+        .macOS(.v14),
         .iOS(.v15),
     ],
     products: [
