@@ -1,5 +1,5 @@
 {
-  "originHash" : "40b0b3b933748e9ea6b303c1029020de24a1e4d15c7ea178e3152dd5d24b357c",
+  "originHash" : "5bf7d0d6b23658d9341f511464452ed1943c04e5fa81669358adf0e75f02f0ec",
   "pins" : [
     {
       "identity" : "postgres-nio",
@@ -60,8 +60,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/apple/swift-log.git",
       "state" : {
-        "revision" : "8c0f217f01000dd30f60d6e536569ad4e74291f9",
-        "version" : "1.11.0"
+        "revision" : "5073617dac96330a486245e4c0179cb0a6fd2256",
+        "version" : "1.12.0"
       }
     },
     {
