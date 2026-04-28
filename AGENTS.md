@@ -24,6 +24,7 @@ DocumentPrimitive is the first-class word processor layer built on `RichTextPrim
 - Preserve true first, primary odd, and even header/footer variants through `HeaderFooterConfig`, `HeaderFooterSlot`, layout, preview, and export.
 - Reuse `SearchPrimitive`, `FilterPrimitive`, `BadgePrimitive`, and `HoverBadgePrimitive` for document navigation and review chrome instead of recreating bespoke controls.
 - Keep `DocumentPrimitiveExport` dependent on `ExportKit` and `PaginationPrimitive`, not on UI-only code.
+- **Platform floor:** macOS 15 / iOS 15 (macOS pinned by `RichTextPrimitive`/`PaginationPrimitive`/`RulerPrimitive`/`TrackChangesPrimitive`/`ExportKit` deps; cannot drop further).
 
 ## Testing
 - Run `swift test` before committing.
