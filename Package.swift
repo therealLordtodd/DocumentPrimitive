@@ -25,7 +25,7 @@ let package = Package(
     name: "DocumentPrimitive",
     platforms: [
         .macOS(.v14),
-        .iOS(.v15),
+        .iOS(.v17),
     ],
     products: [
         .library(name: "DocumentPrimitive", targets: ["DocumentPrimitive"]),
