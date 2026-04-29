@@ -25,6 +25,13 @@ DocumentPrimitive is the first-class word processor layer built on `RichTextPrim
 - Reuse `SearchPrimitive`, `FilterPrimitive`, `BadgePrimitive`, and `HoverBadgePrimitive` for document navigation and review chrome instead of recreating bespoke controls.
 - Keep `DocumentPrimitiveExport` dependent on `ExportKit` and `PaginationPrimitive`, not on UI-only code.
 
+## Performance Posture
+
+- **Hot paths.** `PageLayoutEngine.reflow` runs on every block mutation in the editor; `PageView` body re-evaluates per scroll frame; `BlockToExportMapper` runs once per export; `DocumentEditorState` mutations run per keystroke.
+- **Concurrency model.** `PageLayoutEngine` and `DocumentEditorState` are `@MainActor @Observable`. Document value types (`Document`, `DocumentSection`, blocks) are `Sendable` and `Codable`. Export is synchronous on the calling actor.
+- **Allocation discipline.** `reflow` allocates a fresh `[ComputedPage]` and a fresh `blockPageMap` dictionary per call; acceptable because reflow happens on edit, not per frame, and reuse would require diff-aware invalidation. The `descriptorByItemID` dictionary is per-section, not per-page.
+- **Test speed.** `swift test` runs 118 tests in ~0.26s — every suite under 0.3s. PDF-export suite is the longest at 0.26s and represents real PDF rendering. Reviewed 2026-04-29 (Speed & Clarity audit round 1).
+
 ## Testing
 - Run `swift test` before committing.
 - Run iOS simulator builds for `DocumentPrimitive`, `DocumentPrimitiveExport`, and `DocumentPrimitive-Package` after package graph or cross-platform code changes.
