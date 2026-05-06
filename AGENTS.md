@@ -1,5 +1,21 @@
 # DocumentPrimitive Working Guide
 
+## Xcode Build Stall Recovery
+
+If an Xcode or `xcodebuild` build appears stalled with no useful progress, run the global build doctor before rebooting:
+
+```sh
+xcode-build-doctor
+```
+
+When it reports old stuck compiler probes for this project, clear only this project's stuck build-service tree:
+
+```sh
+xcode-build-doctor --project "DocumentPrimitive" --sample --fix
+```
+
+Use `--dry-run` first when other legitimate builders may be active. Avoid `--all --fix` unless Todd explicitly wants every active Xcode build stopped. If the doctor reports no stuck probes, investigate the build normally (compiler/package/cache/project error).
+
 ## Purpose
 DocumentPrimitive is the first-class word processor layer built on `RichTextPrimitive`. It owns documents, sections, page setup, columns, headers/footers, footnotes, table-of-contents generation, list numbering, field codes, page layout, document editor state, print preview, export mapping, the optional preview integration target, and the optional grid table upgrade target.
 
