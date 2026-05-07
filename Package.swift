@@ -23,6 +23,7 @@ private let marpleDependency: Package.Dependency = {
 
 let package = Package(
     name: "DocumentPrimitive",
+    defaultLocalization: "en",
     platforms: [
         .macOS(.v14),
         .iOS(.v17),
@@ -68,7 +69,8 @@ let package = Package(
                 .product(name: "CommentPrimitive", package: "CommentPrimitive"),
                 .product(name: "TrackChangesPrimitive", package: "TrackChangesPrimitive"),
                 .product(name: "BookmarkPrimitive", package: "BookmarkPrimitive"),
-            ]
+            ],
+            resources: [.process("Resources")]
         ),
         .target(
             name: "DocumentPrimitiveGrid",

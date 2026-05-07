@@ -164,7 +164,7 @@ public struct GridTableBlockEditor: View {
                 )
             }
         } else {
-            Text("Grid table editor requires a table block.")
+            Text(DocumentPrimitiveStrings.gridTableEditorRequiresTableBlock)
                 .font(theme.typography.footnote)
                 .foregroundStyle(theme.colors.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -206,7 +206,7 @@ public struct DocumentTableBlockEditor: View {
                 editorState.replaceBlock(updatedBlock, in: sectionID)
             }
         } else {
-            Text("Table block not found.")
+            Text(DocumentPrimitiveStrings.tableBlockNotFound)
                 .font(theme.typography.footnote)
                 .foregroundStyle(theme.colors.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)

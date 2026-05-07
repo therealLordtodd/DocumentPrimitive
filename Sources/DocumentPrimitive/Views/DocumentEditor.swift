@@ -108,12 +108,12 @@ private struct SectionReorderHandle: View {
             .vantageDraggable(
                 DragItem(
                     content: section.id.rawValue,
-                    previewLabel: "Section",
+                    previewLabel: DocumentPrimitiveStrings.sectionPreviewLabel,
                     sourceID: DragDropID(section.id.rawValue)
                 )
             )
-            .accessibilityLabel("Reorder section")
-            .accessibilityHint("Drag to move this section within the document")
+            .accessibilityLabel(DocumentPrimitiveStrings.reorderSectionAccessibilityLabel)
+            .accessibilityHint(DocumentPrimitiveStrings.reorderSectionAccessibilityHint)
     }
 }
 
@@ -227,17 +227,17 @@ private struct DocumentRulerView: View {
     private func label(for markerType: RulerMarkerType) -> String {
         switch markerType {
         case .leftMargin:
-            "Left margin"
+            DocumentPrimitiveStrings.leftMarginAccessibilityLabel
         case .rightMargin:
-            "Right margin"
+            DocumentPrimitiveStrings.rightMarginAccessibilityLabel
         case .firstLineIndent:
-            "First line indent"
+            DocumentPrimitiveStrings.firstLineIndentAccessibilityLabel
         case .hangingIndent:
-            "Hanging indent"
+            DocumentPrimitiveStrings.hangingIndentAccessibilityLabel
         case let .tabStop(alignment):
-            "\(alignment.rawValue.capitalized) tab stop"
+            DocumentPrimitiveStrings.tabStopAccessibilityLabel(alignment.rawValue.capitalized)
         case .columnGuide:
-            "Column guide"
+            DocumentPrimitiveStrings.columnGuideAccessibilityLabel
         case let .custom(label):
             label
         }

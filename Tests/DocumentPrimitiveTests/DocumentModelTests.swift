@@ -16,6 +16,15 @@ struct DocumentModelTests {
         #expect(PageSetup.a4.pageSize == .a4)
     }
 
+    @Test func packageChromeLocalizationResolvesDefaultResources() {
+        #expect(DocumentPrimitiveStrings.searchDocumentTitle == "Search Document")
+        #expect(DocumentPrimitiveStrings.reviewNavigatorTitle == "Review Navigator")
+        #expect(DocumentPrimitiveStrings.pageLabel(3) == "Page 3")
+        #expect(DocumentPrimitiveStrings.changeCount(1) == "1 Change")
+        #expect(DocumentPrimitiveStrings.changeCount(2) == "2 Changes")
+        #expect(DocumentPrimitiveStrings.gridTableEditorRequiresTableBlock == "Grid table editor requires a table block.")
+    }
+
     @Test func columnLayoutEqualWidthCalculation() {
         let layout = ColumnLayout(columns: 3, spacing: 18, equalWidth: true)
         let widths = layout.resolvedWidths(totalWidth: 300)

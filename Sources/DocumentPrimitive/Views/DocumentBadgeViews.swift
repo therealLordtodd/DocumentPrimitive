@@ -47,7 +47,7 @@ struct DocumentPageBadge: View {
     @Environment(\.documentTheme) private var theme
 
     var body: some View {
-        BadgeView(.text("p.\(pageNumber)"), style: DocumentBadgeStyles.page(theme: theme))
+        BadgeView(.text(DocumentPrimitiveStrings.pageBadgeLabel(pageNumber)), style: DocumentBadgeStyles.page(theme: theme))
     }
 }
 

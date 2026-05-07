@@ -13,17 +13,17 @@ public struct DocumentToolbar: View {
 
     public var body: some View {
         HStack(spacing: theme.spacing.toolbarItemSpacing) {
-            Picker("View", selection: $state.viewMode) {
-                Text("Page").tag(DocumentViewMode.page)
-                Text("Continuous").tag(DocumentViewMode.continuous)
-                Text("Canvas").tag(DocumentViewMode.canvas)
+            Picker(DocumentPrimitiveStrings.viewPickerTitle, selection: $state.viewMode) {
+                Text(DocumentPrimitiveStrings.pageViewModeTitle).tag(DocumentViewMode.page)
+                Text(DocumentPrimitiveStrings.continuousViewModeTitle).tag(DocumentViewMode.continuous)
+                Text(DocumentPrimitiveStrings.canvasViewModeTitle).tag(DocumentViewMode.canvas)
             }
             .pickerStyle(.segmented)
 
-            Toggle("Ruler", isOn: $state.showRuler)
-            Toggle("Formatting", isOn: $state.showFormatting)
+            Toggle(DocumentPrimitiveStrings.rulerToggleTitle, isOn: $state.showRuler)
+            Toggle(DocumentPrimitiveStrings.formattingToggleTitle, isOn: $state.showFormatting)
             Toggle(
-                "Track",
+                DocumentPrimitiveStrings.trackToggleTitle,
                 isOn: Binding(
                     get: { state.changeTracker.isTracking },
                     set: { state.changeTracker.isTracking = $0 }
@@ -31,10 +31,10 @@ public struct DocumentToolbar: View {
             )
 
             Menu {
-                visibilityButton("All Changes", visibility: .showAll)
-                visibilityButton("My Changes", visibility: .showOnlyMine)
-                visibilityButton("Final View", visibility: .final)
-                visibilityButton("Original View", visibility: .original)
+                visibilityButton(DocumentPrimitiveStrings.allChangesTitle, visibility: .showAll)
+                visibilityButton(DocumentPrimitiveStrings.myChangesTitle, visibility: .showOnlyMine)
+                visibilityButton(DocumentPrimitiveStrings.finalViewTitle, visibility: .final)
+                visibilityButton(DocumentPrimitiveStrings.originalViewTitle, visibility: .original)
             } label: {
                 Label(changeVisibilityLabel, systemImage: "line.3.horizontal.decrease.circle")
             }
@@ -42,14 +42,14 @@ public struct DocumentToolbar: View {
 
             Menu {
                 headerFooterOptionButton(
-                    "Different First Page",
+                    DocumentPrimitiveStrings.differentFirstPageTitle,
                     enabled: state.currentSectionUsesDifferentFirstPage
                 ) {
                     state.setCurrentSectionDifferentFirstPage(!state.currentSectionUsesDifferentFirstPage)
                 }
 
                 headerFooterOptionButton(
-                    "Different Odd & Even",
+                    DocumentPrimitiveStrings.differentOddEvenTitle,
                     enabled: state.currentSectionUsesDifferentOddEven
                 ) {
                     state.setCurrentSectionDifferentOddEven(!state.currentSectionUsesDifferentOddEven)
@@ -63,7 +63,7 @@ public struct DocumentToolbar: View {
             Button {
                 showingSearchNavigator.toggle()
             } label: {
-                Label("Search", systemImage: "magnifyingglass")
+                Label(DocumentPrimitiveStrings.searchTitle, systemImage: "magnifyingglass")
             }
             .buttonStyle(.borderless)
             .popover(isPresented: $showingSearchNavigator, arrowEdge: .bottom) {
@@ -73,7 +73,7 @@ public struct DocumentToolbar: View {
             Button {
                 showingReviewNavigator.toggle()
             } label: {
-                Label("Review", systemImage: "list.bullet.rectangle")
+                Label(DocumentPrimitiveStrings.reviewTitle, systemImage: "list.bullet.rectangle")
             }
             .buttonStyle(.borderless)
             .popover(isPresented: $showingReviewNavigator, arrowEdge: .bottom) {
@@ -90,6 +90,7 @@ public struct DocumentToolbar: View {
                 }
                 .buttonStyle(.borderless)
                 .disabled(changeCount == 0)
+                .accessibilityLabel(DocumentPrimitiveStrings.previousChangeAccessibilityLabel)
 
                 Text(changeCountLabel)
                     .font(theme.typography.toolbarLabel)
@@ -103,6 +104,7 @@ public struct DocumentToolbar: View {
                 }
                 .buttonStyle(.borderless)
                 .disabled(changeCount == 0)
+                .accessibilityLabel(DocumentPrimitiveStrings.nextChangeAccessibilityLabel)
 
                 if let currentChangeSummary = state.currentTrackedChangeSummary {
                     Text(currentChangeSummary)
@@ -119,6 +121,7 @@ public struct DocumentToolbar: View {
                 }
                 .buttonStyle(.borderless)
                 .disabled(state.currentTrackedChange == nil)
+                .accessibilityLabel(DocumentPrimitiveStrings.acceptCurrentChangeTitle)
 
                 Button(role: .destructive) {
                     state.rejectCurrentChange()
@@ -127,26 +130,27 @@ public struct DocumentToolbar: View {
                 }
                 .buttonStyle(.borderless)
                 .disabled(state.currentTrackedChange == nil)
+                .accessibilityLabel(DocumentPrimitiveStrings.rejectCurrentChangeTitle)
 
                 Menu {
-                    Button("Accept Current Change") {
+                    Button(DocumentPrimitiveStrings.acceptCurrentChangeTitle) {
                         state.acceptCurrentChange()
                     }
                     .disabled(state.currentTrackedChange == nil)
 
-                    Button("Reject Current Change", role: .destructive) {
+                    Button(DocumentPrimitiveStrings.rejectCurrentChangeTitle, role: .destructive) {
                         state.rejectCurrentChange()
                     }
                     .disabled(state.currentTrackedChange == nil)
 
                     Divider()
 
-                    Button("Accept All Changes") {
+                    Button(DocumentPrimitiveStrings.acceptAllChangesTitle) {
                         state.acceptAllChanges()
                     }
                     .disabled(changeCount == 0)
 
-                    Button("Reject All Changes", role: .destructive) {
+                    Button(DocumentPrimitiveStrings.rejectAllChangesTitle, role: .destructive) {
                         state.rejectAllChanges()
                     }
                     .disabled(changeCount == 0)
@@ -155,6 +159,7 @@ public struct DocumentToolbar: View {
                 }
                 .menuStyle(.borderlessButton)
                 .disabled(changeCount == 0)
+                .accessibilityLabel(DocumentPrimitiveStrings.reviewActionsAccessibilityLabel)
             }
 
             HStack(spacing: theme.spacing.toolbarGroupSpacing) {
@@ -165,8 +170,9 @@ public struct DocumentToolbar: View {
                 }
                 .buttonStyle(.borderless)
                 .disabled(!state.canGoToPreviousPage)
+                .accessibilityLabel(DocumentPrimitiveStrings.previousPageAccessibilityLabel)
 
-                Text("Page \(state.currentPage)")
+                Text(DocumentPrimitiveStrings.pageLabel(state.currentPage))
                     .font(theme.typography.toolbarLabel)
                     .foregroundStyle(theme.colors.secondary)
 
@@ -177,6 +183,7 @@ public struct DocumentToolbar: View {
                 }
                 .buttonStyle(.borderless)
                 .disabled(!state.canGoToNextPage)
+                .accessibilityLabel(DocumentPrimitiveStrings.nextPageAccessibilityLabel)
             }
         }
         .padding(.horizontal, theme.spacing.toolbarHorizontalPadding)
@@ -190,38 +197,38 @@ public struct DocumentToolbar: View {
     private var headerFooterLabel: String {
         switch (state.currentSectionUsesDifferentFirstPage, state.currentSectionUsesDifferentOddEven) {
         case (false, false):
-            "Headers"
+            DocumentPrimitiveStrings.headersTitle
         case (true, false):
-            "Headers: First"
+            DocumentPrimitiveStrings.headersFirstTitle
         case (false, true):
-            "Headers: Odd/Even"
+            DocumentPrimitiveStrings.headersOddEvenTitle
         case (true, true):
-            "Headers: First + Odd/Even"
+            DocumentPrimitiveStrings.headersFirstOddEvenTitle
         }
     }
 
     private var changeVisibilityLabel: String {
         switch state.changeTracker.showChanges {
         case .showAll:
-            "All Changes"
+            DocumentPrimitiveStrings.allChangesTitle
         case .showOnlyMine:
-            "My Changes"
+            DocumentPrimitiveStrings.myChangesTitle
         case .final_:
-            "Final View"
+            DocumentPrimitiveStrings.finalViewTitle
         case .original:
-            "Original View"
+            DocumentPrimitiveStrings.originalViewTitle
         }
     }
 
     private var changeCountLabel: String {
         if changeCount == 0 {
-            return "No Changes"
+            return DocumentPrimitiveStrings.noChangesTitle
         }
         if let currentTrackedChangeID = state.currentTrackedChangeID,
            let index = state.reviewableTrackedChanges.firstIndex(where: { $0.id == currentTrackedChangeID }) {
-            return "Change \(index + 1)/\(changeCount)"
+            return DocumentPrimitiveStrings.changeCountPosition(current: index + 1, total: changeCount)
         }
-        return changeCount == 1 ? "1 Change" : "\(changeCount) Changes"
+        return DocumentPrimitiveStrings.changeCount(changeCount)
     }
     @ViewBuilder
     private func visibilityButton(_ title: String, visibility: ChangeVisibility) -> some View {

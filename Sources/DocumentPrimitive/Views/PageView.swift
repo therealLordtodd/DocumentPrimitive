@@ -71,7 +71,7 @@ public struct PageView: View {
         .shadow(color: .black.opacity(theme.opacity.pageShadowOpacity), radius: theme.shadow.pageRadius, y: theme.shadow.pageY)
         .overlay(alignment: .topTrailing) {
             VStack(alignment: .trailing, spacing: theme.spacing.imageSpacing) {
-                Text("Page \(page.pageNumber)")
+                Text(DocumentPrimitiveStrings.pageLabel(page.pageNumber))
                     .font(theme.typography.caption2)
                     .foregroundStyle(theme.colors.secondary)
 
@@ -1042,31 +1042,34 @@ public struct PageView: View {
 
         return VStack(alignment: .leading, spacing: theme.spacing.navigatorRowSpacing) {
             HStack(spacing: theme.spacing.navigatorRowSpacing) {
-                Label(comment.status == .open ? "Comment" : "Resolved Comment", systemImage: "text.bubble.fill")
+                Label(
+                    comment.status == .open ? DocumentPrimitiveStrings.commentTitle : DocumentPrimitiveStrings.resolvedCommentTitle,
+                    systemImage: "text.bubble.fill"
+                )
                     .font(theme.typography.caption.weight(.semibold))
                     .foregroundStyle(theme.colors.commentTint)
 
                 Spacer(minLength: 0)
 
                 if isFocused {
-                    Text("Focused")
+                    Text(DocumentPrimitiveStrings.focusedTitle)
                         .font(theme.typography.caption2.weight(.semibold))
                         .foregroundStyle(theme.colors.commentTint)
                 }
             }
 
-            TextField("Edit comment", text: bodyDraft, axis: .vertical)
+            TextField(DocumentPrimitiveStrings.editCommentPlaceholder, text: bodyDraft, axis: .vertical)
                 .textFieldStyle(.roundedBorder)
                 .lineLimit(2 ... 4)
 
             if commentBodyDraft(for: comment) != comment.body {
                 HStack(spacing: theme.spacing.navigatorRowSpacing) {
-                    Button("Save") {
+                    Button(DocumentPrimitiveStrings.saveActionTitle) {
                         saveCommentEdits(comment)
                     }
                     .buttonStyle(.borderless)
 
-                    Button("Reset") {
+                    Button(DocumentPrimitiveStrings.resetActionTitle) {
                         discardCommentEdits(comment)
                     }
                     .buttonStyle(.borderless)
@@ -1097,12 +1100,12 @@ public struct PageView: View {
             }
 
             if comment.status == .open {
-                TextField("Reply", text: replyDraft, axis: .vertical)
+                TextField(DocumentPrimitiveStrings.replyPlaceholder, text: replyDraft, axis: .vertical)
                     .textFieldStyle(.roundedBorder)
                     .lineLimit(1 ... 3)
 
                 HStack(spacing: theme.spacing.navigatorRowSpacing) {
-                    Button("Reply") {
+                    Button(DocumentPrimitiveStrings.replyActionTitle) {
                         sendReply(for: comment)
                     }
                     .buttonStyle(.borderless)
@@ -1114,18 +1117,18 @@ public struct PageView: View {
             }
 
             HStack(spacing: theme.spacing.navigatorRowSpacing) {
-                Button("Open") {
+                Button(DocumentPrimitiveStrings.openActionTitle) {
                     state.focusComment(comment.id)
                 }
                 .buttonStyle(.borderless)
 
-                Button("Prev") {
+                Button(DocumentPrimitiveStrings.previousShortActionTitle) {
                     state.goToPreviousComment()
                 }
                 .buttonStyle(.borderless)
                 .disabled(state.commentStore.comments.isEmpty)
 
-                Button("Next") {
+                Button(DocumentPrimitiveStrings.nextActionTitle) {
                     state.goToNextComment()
                 }
                 .buttonStyle(.borderless)
@@ -1134,13 +1137,13 @@ public struct PageView: View {
                 Spacer(minLength: 0)
 
                 if comment.status == .open {
-                    Button("Resolve") {
+                    Button(DocumentPrimitiveStrings.resolveActionTitle) {
                         state.focusComment(comment.id)
                         state.resolveCurrentComment()
                     }
                     .buttonStyle(.borderless)
                 } else {
-                    Button("Reopen") {
+                    Button(DocumentPrimitiveStrings.reopenActionTitle) {
                         state.focusComment(comment.id)
                         state.reopenCurrentComment()
                     }
@@ -1165,14 +1168,14 @@ public struct PageView: View {
 
         return VStack(alignment: .leading, spacing: theme.spacing.navigatorRowSpacing) {
             HStack(spacing: theme.spacing.navigatorRowSpacing) {
-                Label("Tracked Change", systemImage: changeIcon(for: change))
+                Label(DocumentPrimitiveStrings.trackedChangeTitle, systemImage: changeIcon(for: change))
                     .font(theme.typography.caption.weight(.semibold))
                     .foregroundStyle(tint)
 
                 Spacer(minLength: 0)
 
                 if isFocused {
-                    Text("Focused")
+                    Text(DocumentPrimitiveStrings.focusedTitle)
                         .font(theme.typography.caption2.weight(.semibold))
                         .foregroundStyle(tint)
                 }
@@ -1184,18 +1187,18 @@ public struct PageView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
 
             HStack(spacing: theme.spacing.navigatorRowSpacing) {
-                Button("Open") {
+                Button(DocumentPrimitiveStrings.openActionTitle) {
                     state.focusChange(change.id)
                 }
                 .buttonStyle(.borderless)
 
-                Button("Prev") {
+                Button(DocumentPrimitiveStrings.previousShortActionTitle) {
                     state.goToPreviousChange()
                 }
                 .buttonStyle(.borderless)
                 .disabled(state.changeTracker.visibleChanges.isEmpty)
 
-                Button("Next") {
+                Button(DocumentPrimitiveStrings.nextActionTitle) {
                     state.goToNextChange()
                 }
                 .buttonStyle(.borderless)
@@ -1203,13 +1206,13 @@ public struct PageView: View {
 
                 Spacer(minLength: 0)
 
-                Button("Accept") {
+                Button(DocumentPrimitiveStrings.acceptActionTitle) {
                     state.focusChange(change.id)
                     state.acceptCurrentChange()
                 }
                 .buttonStyle(.borderless)
 
-                Button("Reject", role: .destructive) {
+                Button(DocumentPrimitiveStrings.rejectActionTitle, role: .destructive) {
                     state.focusChange(change.id)
                     state.rejectCurrentChange()
                 }
@@ -1296,7 +1299,7 @@ public struct PageView: View {
         if insertions > 0 {
             annotations.append(
                 PageAnnotation(
-                    title: insertions == 1 ? "1 insertion" : "\(insertions) insertions",
+                    title: DocumentPrimitiveStrings.insertionCount(insertions),
                     icon: "plus.circle.fill",
                     tint: theme.colors.insertionTint,
                     action: { state.focusFirstChange(on: page) }
@@ -1306,7 +1309,7 @@ public struct PageView: View {
         if deletions > 0 {
             annotations.append(
                 PageAnnotation(
-                    title: deletions == 1 ? "1 deletion" : "\(deletions) deletions",
+                    title: DocumentPrimitiveStrings.deletionCount(deletions),
                     icon: "minus.circle.fill",
                     tint: theme.colors.deletionTint,
                     action: { state.focusFirstChange(on: page) }
@@ -1316,7 +1319,7 @@ public struct PageView: View {
         if formatChanges > 0 {
             annotations.append(
                 PageAnnotation(
-                    title: formatChanges == 1 ? "1 format change" : "\(formatChanges) format changes",
+                    title: DocumentPrimitiveStrings.formatChangeCount(formatChanges),
                     icon: "paintbrush.fill",
                     tint: theme.colors.formatChangeTint,
                     action: { state.focusFirstChange(on: page) }
@@ -1373,9 +1376,8 @@ public struct PageView: View {
         let summary = comment.body
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .replacingOccurrences(of: "\n", with: " ")
-        let preview = summary.isEmpty ? "Untitled comment" : String(summary.prefix(96))
-        let prefix = count == 1 ? "Comment" : "\(count) comments"
-        return "\(prefix): \(preview)"
+        let preview = summary.isEmpty ? DocumentPrimitiveStrings.untitledCommentTitle : String(summary.prefix(96))
+        return DocumentPrimitiveStrings.commentHoverText(count: count, preview: preview)
     }
 
     private func changeHoverText(_ change: TrackedChange, count: Int) -> String {
@@ -1383,8 +1385,7 @@ public struct PageView: View {
             for: change,
             context: state.trackedChangeContexts[change.id]
         )
-        let prefix = count == 1 ? "Change" : "\(count) changes"
-        return "\(prefix): \(summary)"
+        return DocumentPrimitiveStrings.changeHoverText(count: count, summary: summary)
     }
 
     private func reviewHoverBadgeStyle(tint: Color) -> HoverBadgeStyle {
@@ -1456,7 +1457,7 @@ public struct PageView: View {
     }
 
     private func commentSummary(_ body: String) -> String {
-        trimmedPreview(for: body, fallback: "Untitled comment")
+        trimmedPreview(for: body, fallback: DocumentPrimitiveStrings.untitledCommentTitle)
     }
 
     private func trimmedPreview(for text: String, fallback: String) -> String {

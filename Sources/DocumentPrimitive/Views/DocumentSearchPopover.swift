@@ -15,7 +15,7 @@ struct DocumentSearchPopover: View {
         VStack(alignment: .leading, spacing: theme.spacing.popoverContentSpacing) {
             header
 
-            TextField("Search headings, comments, bookmarks, and changes", text: $state.documentSearchText)
+            TextField(DocumentPrimitiveStrings.searchPlaceholder, text: $state.documentSearchText)
                 .textFieldStyle(.roundedBorder)
 
             scopeChips
@@ -23,7 +23,7 @@ struct DocumentSearchPopover: View {
             Divider()
 
             if isSearching {
-                ProgressView("Searching document...")
+                ProgressView(DocumentPrimitiveStrings.searchingDocumentTitle)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             } else if searchResults.items.isEmpty {
                 emptyState
@@ -48,7 +48,7 @@ struct DocumentSearchPopover: View {
     private var header: some View {
         HStack(alignment: .firstTextBaseline) {
             VStack(alignment: .leading, spacing: 2) {
-                Text("Search Document")
+                Text(DocumentPrimitiveStrings.searchDocumentTitle)
                     .font(theme.typography.headline)
                 Text(summaryText)
                     .font(theme.typography.caption)
@@ -58,7 +58,7 @@ struct DocumentSearchPopover: View {
             Spacer()
 
             if !state.documentSearchText.isEmpty || state.selectedDocumentSearchScope != nil {
-                Button("Reset") {
+                Button(DocumentPrimitiveStrings.resetActionTitle) {
                     state.documentSearchText = ""
                     state.selectedDocumentSearchScope = nil
                 }
@@ -70,7 +70,7 @@ struct DocumentSearchPopover: View {
     private var scopeChips: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: theme.spacing.scopeChipGap) {
-                scopeChip(scope: nil, label: "All", count: totalFacetCount)
+                scopeChip(scope: nil, label: DocumentPrimitiveStrings.allScopeTitle, count: totalFacetCount)
                 ForEach(DocumentSearchScope.allCases, id: \.rawValue) { scope in
                     scopeChip(scope: scope, label: scope.label, count: searchResults.facetCounts[scope] ?? 0)
                 }
@@ -93,7 +93,7 @@ struct DocumentSearchPopover: View {
                     Image(systemName: scope.systemImage)
                 }
                 Text(label)
-                Text("\(count)")
+                Text(count, format: .number)
                     .font(theme.typography.caption2.weight(.semibold))
                     .foregroundStyle(isSelected ? theme.colors.accent : theme.colors.secondary)
             }
@@ -154,7 +154,7 @@ struct DocumentSearchPopover: View {
                         DocumentMetadataBadge(text: item.statusLabel)
                         if let score = item.score {
                             DocumentMetadataBadge(
-                                text: "Score \(score.formatted(.number.precision(.fractionLength(1))))"
+                                text: DocumentPrimitiveStrings.scoreLabel(score.formatted(.number.precision(.fractionLength(1))))
                             )
                         }
                     }
@@ -216,10 +216,10 @@ struct DocumentSearchPopover: View {
 
     private var summaryText: String {
         if state.documentSearchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return "Browsing \(searchResults.totalCount) indexed items"
+            return DocumentPrimitiveStrings.browsingIndexedItems(searchResults.totalCount)
         }
 
-        return "\(searchResults.items.count) of \(searchResults.totalCount) matches"
+        return DocumentPrimitiveStrings.searchMatches(visible: searchResults.items.count, total: searchResults.totalCount)
     }
 
     private var totalFacetCount: Int {
@@ -228,13 +228,13 @@ struct DocumentSearchPopover: View {
 
     private var emptyTitle: String {
         state.documentSearchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            ? "No indexed document items"
-            : "No matches found"
+            ? DocumentPrimitiveStrings.noIndexedItemsTitle
+            : DocumentPrimitiveStrings.noMatchesFoundTitle
     }
 
     private var emptyMessage: String {
         state.documentSearchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            ? "Headings, comments, bookmarks, and tracked changes will appear here."
-            : "Try a different term or widen the selected scope."
+            ? DocumentPrimitiveStrings.noIndexedItemsMessage
+            : DocumentPrimitiveStrings.noMatchesFoundMessage
     }
 }

@@ -29,7 +29,7 @@ struct ReviewNavigatorPopover: View {
                 fields: state.reviewNavigatorFilterFields
             )
 
-            DisclosureGroup("Advanced Filters", isExpanded: $showsAdvancedFilters) {
+            DisclosureGroup(DocumentPrimitiveStrings.advancedFiltersTitle, isExpanded: $showsAdvancedFilters) {
                 FilterBuilder(
                     configuration: $state.reviewFilterConfiguration,
                     fields: state.reviewNavigatorFilterFields,
@@ -43,13 +43,13 @@ struct ReviewNavigatorPopover: View {
 
             if state.reviewNavigatorItems.isEmpty {
                 emptyState(
-                    title: "No review items yet",
-                    message: "Comments, tracked changes, and bookmarks will appear here."
+                    title: DocumentPrimitiveStrings.noReviewItemsTitle,
+                    message: DocumentPrimitiveStrings.noReviewItemsMessage
                 )
             } else if state.filteredReviewNavigatorItems.isEmpty {
                 emptyState(
-                    title: "No matching review items",
-                    message: "Adjust the active filters to widen the navigator."
+                    title: DocumentPrimitiveStrings.noMatchingReviewItemsTitle,
+                    message: DocumentPrimitiveStrings.noMatchingReviewItemsMessage
                 )
             } else {
                 ScrollView {
@@ -69,7 +69,7 @@ struct ReviewNavigatorPopover: View {
     private var header: some View {
         HStack(alignment: .firstTextBaseline) {
             VStack(alignment: .leading, spacing: 2) {
-                Text("Review Navigator")
+                Text(DocumentPrimitiveStrings.reviewNavigatorTitle)
                     .font(theme.typography.headline)
                 Text(summaryText)
                     .font(theme.typography.caption)
@@ -79,7 +79,7 @@ struct ReviewNavigatorPopover: View {
             Spacer()
 
             if !state.reviewFilterConfiguration.isEmpty {
-                Button("Reset") {
+                Button(DocumentPrimitiveStrings.resetActionTitle) {
                     state.reviewFilterConfiguration = FilterConfiguration()
                 }
                 .buttonStyle(.borderless)
@@ -89,7 +89,7 @@ struct ReviewNavigatorPopover: View {
 
     private func currentCommentControls(summary: String) -> some View {
         VStack(alignment: .leading, spacing: theme.spacing.navigatorRowSpacing) {
-            Text("Current Comment")
+            Text(DocumentPrimitiveStrings.currentCommentTitle)
                 .font(theme.typography.caption)
                 .foregroundStyle(theme.colors.secondary)
 
@@ -98,12 +98,12 @@ struct ReviewNavigatorPopover: View {
                 .lineLimit(2)
 
             HStack(spacing: theme.spacing.navigatorRowSpacing) {
-                Button("Previous") {
+                Button(DocumentPrimitiveStrings.previousActionTitle) {
                     state.goToPreviousComment()
                 }
                 .disabled(commentCount == 0)
 
-                Button("Next") {
+                Button(DocumentPrimitiveStrings.nextActionTitle) {
                     state.goToNextComment()
                 }
                 .disabled(commentCount == 0)
@@ -111,11 +111,11 @@ struct ReviewNavigatorPopover: View {
                 Spacer()
 
                 if state.currentComment?.status == .open {
-                    Button("Resolve") {
+                    Button(DocumentPrimitiveStrings.resolveActionTitle) {
                         state.resolveCurrentComment()
                     }
                 } else {
-                    Button("Reopen") {
+                    Button(DocumentPrimitiveStrings.reopenActionTitle) {
                         state.reopenCurrentComment()
                     }
                 }
@@ -202,6 +202,9 @@ struct ReviewNavigatorPopover: View {
     }
 
     private var summaryText: String {
-        "\(state.filteredReviewNavigatorItems.count) of \(state.reviewNavigatorItems.count) items"
+        DocumentPrimitiveStrings.reviewItemsSummary(
+            visible: state.filteredReviewNavigatorItems.count,
+            total: state.reviewNavigatorItems.count
+        )
     }
 }

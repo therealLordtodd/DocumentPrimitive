@@ -13,11 +13,11 @@ enum ReviewNavigatorItemKind: String, CaseIterable, Sendable {
     var label: String {
         switch self {
         case .comment:
-            "Comment"
+            DocumentPrimitiveStrings.commentTitle
         case .change:
-            "Change"
+            DocumentPrimitiveStrings.changeStatusTitle
         case .bookmark:
-            "Bookmark"
+            DocumentPrimitiveStrings.bookmarkStatusTitle
         }
     }
 
@@ -76,11 +76,11 @@ struct ReviewNavigatorItem: Identifiable, Equatable, Sendable {
         if let commentStatus {
             switch commentStatus {
             case CommentStatus.open.rawValue:
-                return "Open"
+                return DocumentPrimitiveStrings.openCommentStatusTitle
             case CommentStatus.resolved.rawValue:
-                return "Resolved"
+                return DocumentPrimitiveStrings.resolvedCommentStatusTitle
             case CommentStatus.wontFix.rawValue:
-                return "Won't Fix"
+                return DocumentPrimitiveStrings.wontFixCommentStatusTitle
             default:
                 return commentStatus.capitalized
             }
@@ -89,9 +89,9 @@ struct ReviewNavigatorItem: Identifiable, Equatable, Sendable {
         if let bookmarkType {
             switch bookmarkType {
             case "automatic":
-                return "Automatic"
+                return DocumentPrimitiveStrings.automaticStatusTitle
             case "manual":
-                return "Manual"
+                return DocumentPrimitiveStrings.manualStatusTitle
             default:
                 return bookmarkType.capitalized
             }
@@ -100,11 +100,11 @@ struct ReviewNavigatorItem: Identifiable, Equatable, Sendable {
         if let changeType {
             switch changeType {
             case "insertion":
-                return "Insertion"
+                return DocumentPrimitiveStrings.insertionTitle
             case "deletion":
-                return "Deletion"
+                return DocumentPrimitiveStrings.deletionTitle
             case "format":
-                return "Formatting"
+                return DocumentPrimitiveStrings.formattingTitle
             default:
                 return changeType.capitalized
             }
@@ -160,14 +160,14 @@ extension DocumentEditorState {
 
         return [
             QuickFilter(
-                name: "Comments",
+                name: DocumentPrimitiveStrings.quickFilterCommentsTitle,
                 icon: "text.bubble",
                 filter: FilterGroup(predicates: [
                     schema.predicate(\.kindRawValue, .equals, .enumValue(ReviewNavigatorItemKind.comment.rawValue)),
                 ])
             ),
             QuickFilter(
-                name: "Open Comments",
+                name: DocumentPrimitiveStrings.quickFilterOpenCommentsTitle,
                 icon: "text.bubble.fill",
                 filter: FilterGroup(predicates: [
                     schema.predicate(\.kindRawValue, .equals, .enumValue(ReviewNavigatorItemKind.comment.rawValue)),
@@ -175,14 +175,14 @@ extension DocumentEditorState {
                 ])
             ),
             QuickFilter(
-                name: "Changes",
+                name: DocumentPrimitiveStrings.quickFilterChangesTitle,
                 icon: "arrow.triangle.branch",
                 filter: FilterGroup(predicates: [
                     schema.predicate(\.kindRawValue, .equals, .enumValue(ReviewNavigatorItemKind.change.rawValue)),
                 ])
             ),
             QuickFilter(
-                name: "My Changes",
+                name: DocumentPrimitiveStrings.quickFilterMyChangesTitle,
                 icon: "person.crop.circle",
                 filter: FilterGroup(predicates: [
                     schema.predicate(\.kindRawValue, .equals, .enumValue(ReviewNavigatorItemKind.change.rawValue)),
@@ -190,14 +190,14 @@ extension DocumentEditorState {
                 ])
             ),
             QuickFilter(
-                name: "Bookmarks",
+                name: DocumentPrimitiveStrings.quickFilterBookmarksTitle,
                 icon: "bookmark",
                 filter: FilterGroup(predicates: [
                     schema.predicate(\.kindRawValue, .equals, .enumValue(ReviewNavigatorItemKind.bookmark.rawValue)),
                 ])
             ),
             QuickFilter(
-                name: "This Page",
+                name: DocumentPrimitiveStrings.quickFilterThisPageTitle,
                 icon: "doc.text.magnifyingglass",
                 filter: FilterGroup(predicates: [
                     schema.predicate(\.pageNumber, .equals, .int(currentPage)),
@@ -233,14 +233,14 @@ extension DocumentEditorState {
         schema.register(
             \.kindRawValue,
             id: "kind",
-            label: "Type",
+            label: DocumentPrimitiveStrings.filterTypeTitle,
             type: .enumeration,
             suggestions: ReviewNavigatorItemKind.allCases.map { .enumValue($0.rawValue) }
         )
         schema.register(
             \.commentStatus,
             id: "comment_status",
-            label: "Comment Status",
+            label: DocumentPrimitiveStrings.filterCommentStatusTitle,
             type: .enumeration,
             suggestions: [
                 .enumValue(CommentStatus.open.rawValue),
@@ -251,33 +251,33 @@ extension DocumentEditorState {
         schema.register(
             \.bookmarkType,
             id: "bookmark_type",
-            label: "Bookmark Type",
+            label: DocumentPrimitiveStrings.filterBookmarkTypeTitle,
             type: .enumeration,
             suggestions: [.enumValue("manual"), .enumValue("automatic")]
         )
         schema.register(
             \.changeType,
             id: "change_type",
-            label: "Change Type",
+            label: DocumentPrimitiveStrings.filterChangeTypeTitle,
             type: .enumeration,
             suggestions: [.enumValue("insertion"), .enumValue("deletion"), .enumValue("format")]
         )
         schema.register(
             \.author,
             id: "author",
-            label: "Author",
+            label: DocumentPrimitiveStrings.filterAuthorTitle,
             type: .string
         )
         schema.register(
             \.pageNumber,
             id: "page",
-            label: "Page",
+            label: DocumentPrimitiveStrings.filterPageTitle,
             type: .number
         )
         schema.register(
             \.searchText,
             id: "text",
-            label: "Text",
+            label: DocumentPrimitiveStrings.filterTextTitle,
             type: .string
         )
         return schema
@@ -290,7 +290,7 @@ extension DocumentEditorState {
         let bookmarkType = bookmark.isAutoGenerated ? "automatic" : "manual"
         let pageNumber = reviewNavigatorPageNumber(for: bookmark.anchor.contentID)
             ?? bookmark.metadata["page"].flatMap(Int.init)
-        let subtitle = bookmark.isAutoGenerated ? "Automatic bookmark" : "Manual bookmark"
+        let subtitle = bookmark.isAutoGenerated ? DocumentPrimitiveStrings.automaticBookmarkTitle : DocumentPrimitiveStrings.manualBookmarkTitle
 
         return ReviewNavigatorItem(
             sourceID: bookmark.id.rawValue,
@@ -317,8 +317,11 @@ extension DocumentEditorState {
         blockOrderByID: [String: Int]
     ) -> ReviewNavigatorItem {
         let contentID = anchoredContentID(for: comment)
-        let preview = reviewNavigatorPreview(comment.body, fallback: "Untitled comment")
-        let subtitle = "\(reviewNavigatorCommentStatusLabel(comment.status)) by \(comment.author.rawValue)"
+        let preview = reviewNavigatorPreview(comment.body, fallback: DocumentPrimitiveStrings.untitledCommentTitle)
+        let subtitle = DocumentPrimitiveStrings.statusByAuthor(
+            status: reviewNavigatorCommentStatusLabel(comment.status),
+            author: comment.author.rawValue
+        )
 
         return ReviewNavigatorItem(
             sourceID: comment.id.rawValue,
@@ -347,7 +350,10 @@ extension DocumentEditorState {
     ) -> ReviewNavigatorItem {
         let summary = summaryResolver.summary(for: change, context: trackedChangeContexts[change.id])
         let type = reviewNavigatorChangeType(change.type)
-        let subtitle = "\(reviewNavigatorChangeTypeLabel(type)) by \(change.author.rawValue)"
+        let subtitle = DocumentPrimitiveStrings.statusByAuthor(
+            status: reviewNavigatorChangeTypeLabel(type),
+            author: change.author.rawValue
+        )
 
         return ReviewNavigatorItem(
             sourceID: change.id.rawValue,
@@ -417,11 +423,11 @@ extension DocumentEditorState {
     private func reviewNavigatorCommentStatusLabel(_ status: CommentStatus) -> String {
         switch status {
         case .open:
-            "Open comment"
+            DocumentPrimitiveStrings.openCommentStatusDescription
         case .resolved:
-            "Resolved comment"
+            DocumentPrimitiveStrings.resolvedCommentStatusDescription
         case .wontFix:
-            "Won't-fix comment"
+            DocumentPrimitiveStrings.wontFixCommentStatusDescription
         }
     }
 
@@ -439,11 +445,11 @@ extension DocumentEditorState {
     private func reviewNavigatorChangeTypeLabel(_ type: String) -> String {
         switch type {
         case "insertion":
-            "Insertion"
+            DocumentPrimitiveStrings.insertionTitle
         case "deletion":
-            "Deletion"
+            DocumentPrimitiveStrings.deletionTitle
         case "format":
-            "Formatting"
+            DocumentPrimitiveStrings.formattingTitle
         default:
             type.capitalized
         }

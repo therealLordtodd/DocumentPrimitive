@@ -106,7 +106,7 @@ extension DocumentEditorState {
     public var currentCommentSummary: String? {
         guard let currentComment else { return nil }
         let trimmed = currentComment.body.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? "Untitled comment" : String(trimmed.prefix(40))
+        return trimmed.isEmpty ? DocumentPrimitiveStrings.untitledCommentTitle : String(trimmed.prefix(40))
     }
 
     public func focusComment(_ id: CommentID) {

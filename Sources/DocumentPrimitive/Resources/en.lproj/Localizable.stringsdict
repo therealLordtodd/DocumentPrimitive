@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>document.changeCount.total</key>
+    <dict>
+        <key>NSStringLocalizedFormatKey</key>
+        <string>%#@changes@</string>
+        <key>changes</key>
+        <dict>
+            <key>NSStringFormatSpecTypeKey</key>
+            <string>NSStringPluralRuleType</string>
+            <key>NSStringFormatValueTypeKey</key>
+            <string>d</string>
+            <key>one</key>
+            <string>%d Change</string>
+            <key>other</key>
+            <string>%d Changes</string>
+        </dict>
+    </dict>
+    <key>document.search.summary.browsing</key>
+    <dict>
+        <key>NSStringLocalizedFormatKey</key>
+        <string>Browsing %#@items@</string>
+        <key>items</key>
+        <dict>
+            <key>NSStringFormatSpecTypeKey</key>
+            <string>NSStringPluralRuleType</string>
+            <key>NSStringFormatValueTypeKey</key>
+            <string>d</string>
+            <key>one</key>
+            <string>%d indexed item</string>
+            <key>other</key>
+            <string>%d indexed items</string>
+        </dict>
+    </dict>
+    <key>document.annotation.insertionCount</key>
+    <dict>
+        <key>NSStringLocalizedFormatKey</key>
+        <string>%#@insertions@</string>
+        <key>insertions</key>
+        <dict>
+            <key>NSStringFormatSpecTypeKey</key>
+            <string>NSStringPluralRuleType</string>
+            <key>NSStringFormatValueTypeKey</key>
+            <string>d</string>
+            <key>one</key>
+            <string>%d insertion</string>
+            <key>other</key>
+            <string>%d insertions</string>
+        </dict>
+    </dict>
+    <key>document.annotation.deletionCount</key>
+    <dict>
+        <key>NSStringLocalizedFormatKey</key>
+        <string>%#@deletions@</string>
+        <key>deletions</key>
+        <dict>
+            <key>NSStringFormatSpecTypeKey</key>
+            <string>NSStringPluralRuleType</string>
+            <key>NSStringFormatValueTypeKey</key>
+            <string>d</string>
+            <key>one</key>
+            <string>%d deletion</string>
+            <key>other</key>
+            <string>%d deletions</string>
+        </dict>
+    </dict>
+    <key>document.annotation.formatChangeCount</key>
+    <dict>
+        <key>NSStringLocalizedFormatKey</key>
+        <string>%#@formatChanges@</string>
+        <key>formatChanges</key>
+        <dict>
+            <key>NSStringFormatSpecTypeKey</key>
+            <string>NSStringPluralRuleType</string>
+            <key>NSStringFormatValueTypeKey</key>
+            <string>d</string>
+            <key>one</key>
+            <string>%d format change</string>
+            <key>other</key>
+            <string>%d format changes</string>
+        </dict>
+    </dict>
+    <key>document.hover.commentPrefix</key>
+    <dict>
+        <key>NSStringLocalizedFormatKey</key>
+        <string>%#@comments@</string>
+        <key>comments</key>
+        <dict>
+            <key>NSStringFormatSpecTypeKey</key>
+            <string>NSStringPluralRuleType</string>
+            <key>NSStringFormatValueTypeKey</key>
+            <string>d</string>
+            <key>one</key>
+            <string>Comment</string>
+            <key>other</key>
+            <string>%d comments</string>
+        </dict>
+    </dict>
+    <key>document.hover.changePrefix</key>
+    <dict>
+        <key>NSStringLocalizedFormatKey</key>
+        <string>%#@changes@</string>
+        <key>changes</key>
+        <dict>
+            <key>NSStringFormatSpecTypeKey</key>
+            <string>NSStringPluralRuleType</string>
+            <key>NSStringFormatValueTypeKey</key>
+            <string>d</string>
+            <key>one</key>
+            <string>Change</string>
+            <key>other</key>
+            <string>%d changes</string>
+        </dict>
+    </dict>
+</dict>
+</plist>

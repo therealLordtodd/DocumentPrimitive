@@ -45,7 +45,7 @@ public struct GridDocumentEditor: View {
                             .fill(index.isMultiple(of: 4) ? theme.colors.secondary : theme.colors.secondary.opacity(theme.opacity.rulerTickMinor + 0.05))
                             .frame(width: 1, height: index.isMultiple(of: 4) ? 14 : 8)
                         if index < tickCount, index.isMultiple(of: 4) {
-                            Text("\(index / 4)")
+                            Text(index / 4, format: .number)
                                 .font(theme.typography.caption2)
                                 .foregroundStyle(theme.colors.secondary)
                         }
