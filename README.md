@@ -40,6 +40,19 @@ Optional advanced table editing built on `GridPrimitive`, available only where t
 
 That split is important. Most hosts need the core product first and then opt into export, preview, or grid behavior only when they actually need it.
 
+## Standalone Use And Canvas Embedding
+
+DocumentPrimitive is first a normal host-app document editor. A host can put
+`DocumentEditor`, page views, print preview, attachment galleries, or the grid
+table editor into any SwiftUI layout without using CanvasPrimitive.
+
+If a host wants a document editor or document preview card on a canvas, that
+should be a thin CanvasPrimitive adapter that wraps DocumentPrimitive. The
+adapter owns canvas defaults such as title, icon, default frame,
+content-interaction policy, and payload encoding. DocumentPrimitive owns the
+document model, editor state, layout, export, preview, and optional grid
+integration. It must not import CanvasPrimitive or learn canvas object lifecycle.
+
 ## Core model
 
 ### `Document`

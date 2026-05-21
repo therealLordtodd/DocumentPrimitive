@@ -40,6 +40,19 @@ DocumentPrimitive is the first-class word processor layer built on `RichTextPrim
 - Preserve true first, primary odd, and even header/footer variants through `HeaderFooterConfig`, `HeaderFooterSlot`, layout, preview, and export.
 - Reuse `SearchPrimitive`, `FilterPrimitive`, `BadgePrimitive`, and `HoverBadgePrimitive` for document navigation and review chrome instead of recreating bespoke controls.
 - Keep `DocumentPrimitiveExport` dependent on `ExportKit` and `PaginationPrimitive`, not on UI-only code.
+- Keep DocumentPrimitive standalone-first. It must remain usable in normal
+  host-app layouts without CanvasPrimitive. Future canvas-droppable document
+  behavior belongs in a thin CanvasPrimitive adapter target, not in the core,
+  export, preview, or grid products.
+
+## Canvas Adapter Boundary
+
+DocumentPrimitive owns document structure, editor state, layout, export,
+preview, and optional grid-backed table editing. CanvasPrimitive owns object
+shell behavior such as frame, collapse/restore, move/resize, placement,
+grouping, zones, links, and diagnostics. A future document canvas adapter may
+provide canvas defaults and payload mapping, but it must not make the document
+stack depend on CanvasPrimitive.
 
 ## Performance Posture
 
