@@ -69,6 +69,29 @@ grouping, zones, links, and diagnostics. A future document canvas adapter may
 provide canvas defaults and payload mapping, but it must not make the document
 stack depend on CanvasPrimitive.
 
+## Platform Support
+
+Reviewed 2026-05-26 (cross-compile audit round 2).
+
+`Package.swift` declares `platforms: [.macOS(.v14), .iOS(.v17)]`. Both
+platforms compile cleanly; product surface differs slightly because some
+sub-products depend on macOS-only primitives.
+
+| Product | macOS 14+ | iOS 17+ | Notes |
+|---------|-----------|---------|-------|
+| `DocumentPrimitive` | full | full | Core document model + page-mode editor. `PageView` typealiases `NSColor`/`UIColor` via `#if canImport(AppKit) / #elseif canImport(UIKit)`. |
+| `DocumentPrimitiveExport` | full | full | Markdown / HTML / PDF / `BlockToExportMapper`. |
+| `DocumentPrimitivePreview` | full | full | Inline preview + attachment galleries via `FilePreviewPrimitive`. |
+| `DocumentPrimitiveCapture` | full | not declared | `DocumentPageRenderer` uses `Ansel` for offscreen page-image capture; the target is gated `#if os(macOS)`. iOS consumers see the umbrella product but should not link `DocumentPrimitiveCapture` until an iOS rasterization path exists. |
+| `DocumentPrimitiveGrid` | full | not built | `GridPrimitive` and `GridPrimitiveTable` are conditioned `.when(platforms: [.macOS])` at the manifest layer. iOS hosts link the umbrella product but the Grid module is not part of the iOS surface. |
+| `DocumentPrimitiveMarpleProbes` | full | full | Pure value-type probe target. |
+
+**Recovery paths.** Capture (`DocumentPageRenderer`) would unlock iOS once a
+UIKit-backed offscreen renderer lands behind a sibling `#if canImport(UIKit)`
+branch. Grid would unlock iOS when `GridPrimitive` itself declares iOS. Both
+recovery paths are kit-internal; the core, export, preview, and Marple-probe
+products already compile cleanly for both platforms.
+
 ## Performance Posture
 
 - **Hot paths.** `PageLayoutEngine.reflow` runs on every block mutation in the editor; `PageView` body re-evaluates per scroll frame; `BlockToExportMapper` runs once per export; `DocumentEditorState` mutations run per keystroke.
