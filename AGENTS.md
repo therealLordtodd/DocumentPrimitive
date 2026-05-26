@@ -19,6 +19,21 @@ Use `--dry-run` first when other legitimate builders may be active. Avoid `--all
 ## Purpose
 DocumentPrimitive is the first-class word processor layer built on `RichTextPrimitive`. It owns documents, sections, page setup, columns, headers/footers, footnotes, table-of-contents generation, list numbering, field codes, page layout, document editor state, print preview, export mapping, the optional preview integration target, and the optional grid table upgrade target.
 
+## Repositories & Local Paths
+
+| Package | Repository | Local Path |
+|---------|------------|------------|
+| **DocumentPrimitive** | https://github.com/therealLordtodd/DocumentPrimitive.git | `/Users/todd/Building - Apple/Packages/DocumentPrimitive` |
+
+## Build & Test
+
+- Build: `swift build`
+- Test: `swift test`
+
+## Style Guide
+
+Canonical style-compliance vector: `/Users/todd/Library/CloudStorage/GoogleDrive-todd@cowingfamily.com/My Drive/The Commons/Libraries/Foundation Libraries/code-review-vectors/b6-style-guide-compliance.md`. Read before touching SwiftUI surfaces in the core, preview, or grid targets.
+
 ## Key Directories
 - `Sources/DocumentPrimitive`: Core document model, services, layout engine, editor state, data-source adapters, and SwiftUI views.
 - `Sources/DocumentPrimitiveExport`: Markdown, HTML, PDF exporters and `BlockToExportMapper`.
@@ -33,7 +48,7 @@ DocumentPrimitive is the first-class word processor layer built on `RichTextPrim
 - `Document.sections[].blocks` is the source of truth. Data-source adapters such as `SectionDataSource`, `PageScopedDataSource`, `FragmentDataSource`, `BlockDataSource`, and `HeaderFooterDataSource` are editing bridges only.
 - `PageLayoutEngine`, TOC generation, export, preview, and read paths must consume `Document.sections` directly, not cached editor data sources.
 - Page mode should use the page-scoped editor surface whenever the page is a single-column, whole-block editing surface. Reserve fragment and block editors for genuinely split or repeated placements.
-- Core `DocumentPrimitive` must remain cross-platform for macOS 14 and iOS 15 and must not depend on `GridPrimitive`.
+- Core `DocumentPrimitive` must remain cross-platform for macOS 14 and iOS 17 (matches `Package.swift`'s declared floor) and must not depend on `GridPrimitive`.
 - Keep advanced grid editing in `DocumentPrimitiveGrid`. Grid source should stay conditional on GridPrimitive availability.
 - Keep preview-backed attachment and gallery code in `DocumentPrimitivePreview` so the core target stays lighter and free of `PreviewPrimitive`.
 - `DocumentPrimitivePreview` should preserve remote attachment URLs and let `PreviewPrimitive` surface capability limits instead of dropping assets during resolution.
