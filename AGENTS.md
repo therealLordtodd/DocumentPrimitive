@@ -76,6 +76,18 @@ stack depend on CanvasPrimitive.
 - **Allocation discipline.** `reflow` allocates a fresh `[ComputedPage]` and a fresh `blockPageMap` dictionary per call; acceptable because reflow happens on edit, not per frame, and reuse would require diff-aware invalidation. The `descriptorByItemID` dictionary is per-section, not per-page.
 - **Test speed.** `swift test` runs 118 tests in ~0.26s — every suite under 0.3s. PDF-export suite is the longest at 0.26s and represents real PDF rendering. Reviewed 2026-04-29 (Speed & Clarity audit round 1).
 
+## Security Posture
+
+**Surfaces present.** Document model with file-attachment payloads (image blob, embed URL), temporary-directory file materialization in `DocumentPrimitivePreview` for previewing attachments via `FilePreviewPrimitive`, and PDF/HTML/Markdown export that materializes document content to `Data`.
+
+**Where data comes from.** Document blocks are host-owned (the host's editor populates them); attachment URLs are document-block-owned, not user-supplied at the resolver boundary. `DocumentPrimitivePreview.materializedTemporaryURL` writes to `FileManager.default.temporaryDirectory` with path-component sanitization (slashes and colons replaced) before `appendingPathComponent`, so block IDs and titles cannot traverse outside the temp directory.
+
+**Credentials / network / PII.** No credentials. No network surface inside this package — image data and embed URLs flow through (host-owned); fetching is the host's or `FilePreviewPrimitive`'s responsibility. Documents may carry PII in their content; storage and logging posture of document content is host responsibility (DocumentPrimitive does not log document content).
+
+**What's logged vs not.** Package does not call `print()` and does not own a `Logger`. Hosts log around the document model; the document model itself never emits content. Sandbox/entitlement: hosts that load remote attachment URLs (via `DocumentPrimitivePreview`) need network entitlement on macOS App Sandbox.
+
+Reviewed 2026-05-26 (Security round 2).
+
 ## Testing
 - Run `swift test` before committing.
 - Run iOS simulator builds for `DocumentPrimitive`, `DocumentPrimitiveExport`, and `DocumentPrimitive-Package` after package graph or cross-platform code changes.
