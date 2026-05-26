@@ -111,6 +111,21 @@ products already compile cleanly for both platforms.
 
 Reviewed 2026-05-26 (Security round 2).
 
+## AI Integration Contract
+
+(Adopts the [AI-Equal Primitive Convention](../CONVENTIONS/ai-equal-primitive-convention.md) **v2.0**.)
+
+DocumentPrimitive is Cat 3 by UI surface but ships verifiability via `DocumentPrimitiveMarpleProbes` only — controllability (`<Kit>AISeams`) lives at the host (document editor app) that owns the editor lifecycle, the undo stack, and the user-visible action vocabulary. The package never invokes mutations on its own; `DocumentEditorState` exposes structured `Codable` document data + per-keystroke mutation methods that agents can drive directly through the standard public API.
+
+| Package | How it's used |
+|---|---|
+| `LoggingKit` | Not adopted. Document model emits no diagnostics on its own; hosts log around it. Trigger to revisit: host bug reports show missing diagnostics from layout / export hot paths. |
+| `AISeamsKit` | Not adopted in this package. Hosts wrapping DocumentPrimitive (e.g. a writing app) own the `AISurface` for editor actions because the agent verbs (`insertBlock`, `deleteSection`, `applyStyle`) are inseparable from host-side undo / persistence policy. Log as `[ai-layering]` follow-up if a sibling `DocumentPrimitiveAISeams` adapter target becomes warranted. |
+| `Marple` (probes) | **Shipped** — `DocumentPrimitiveMarpleProbes` (pure value-type probe target) is the verifiability surface for layout/export determinism. |
+| `Ansel` | Adopted only in `DocumentPrimitiveCapture` for offscreen page-image capture. |
+
+Reviewed 2026-05-26 (AI Integration round 2).
+
 ## Testing
 - Run `swift test` before committing.
 - Run iOS simulator builds for `DocumentPrimitive`, `DocumentPrimitiveExport`, and `DocumentPrimitive-Package` after package graph or cross-platform code changes.
